@@ -1,0 +1,13 @@
+# analysis + render artifacts
+work/
+out/
+
+# gameplay footage (big binaries — keep the folder, not the videos)
+gameplay/*
+!gameplay/README.md
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/

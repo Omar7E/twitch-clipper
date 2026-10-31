@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "karak"
+version = "0.1.0"
+description = "Find the best moments in a Twitch VOD and cut them into vertical clips"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "yt-dlp>=2024.1.1", "faster-whisper>=1.0"]
+
+[project.scripts]
+karak = "karak.cli:main"
+
+[tool.setuptools]
+packages = ["karak"]
