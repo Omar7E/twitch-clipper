@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .config import Config
 from .pipeline import REPO, analyse, render_moments, work_dir_for
-from .render import RenderError
+from .render import RenderError, find_gameplay, normalise_gameplay
 from .transcribe import TranscribeUnavailable
 from .twitch import TwitchError, parse_vod_id
 
@@ -154,6 +154,13 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("-o", "--out", type=Path, default=None, help="output directory")
     _common(r)
 
+    gp = sub.add_parser("gameplay",
+                        help="prep filler footage into vertical 1080x1920")
+    gp.add_argument("source", nargs="+",
+                    help="local video file(s) or directory to convert")
+    gp.add_argument("-o", "--out", type=Path, default=None,
+                    help="where to write (default: ./gameplay)")
+
     a = sub.add_parser("auto", help="find then render in one go")
     a.add_argument("url", help="Twitch VOD url or id")
     a.add_argument("-n", "--count", type=int)
@@ -187,6 +194,22 @@ def main(argv: list[str] | None = None) -> int:
         hit["title_source"] = "manual"
         path.write_text(json.dumps(data, indent=2))
         print(f"#{args.rank} title set to: {hit['title']}")
+        return 0
+
+    if args.cmd == "gameplay":
+        out = args.out or (REPO / "gameplay")
+        srcs = find_gameplay([Path(x) for x in args.source])
+        if not srcs:
+            raise SystemExit("no video files found in: "
+                             + ", ".join(str(x) for x in args.source))
+        for src in srcs:
+            dest = out / f"{src.stem}_vertical.mp4"
+            if dest.resolve() == src.resolve():
+                continue
+            print(f"→ {src.name} → {dest.name}")
+            normalise_gameplay(src, dest)
+            print(f"  ✓ {dest.stat().st_size / 1e6:.1f} MB  1080x1920")
+        print(f"\nready in {out}")
         return 0
 
     cfg = _load_cfg(args)

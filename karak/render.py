@@ -162,3 +162,28 @@ def render_clip(clip: Path, gameplay: Path | None, ass_file: Path, dest: Path,
     if not dest.exists() or dest.stat().st_size == 0:
         raise RenderError(f"render produced no output at {dest}")
     return dest
+
+
+def normalise_gameplay(src: Path, dest: Path, *, width: int = 1080,
+                       height: int = 1920, fps: int = 30, crf: int = 23,
+                       quiet: bool = True) -> Path:
+    """Centre-crop and scale any footage to a vertical 1080x1920 master.
+
+    Stored portrait so the same file works whichever band it lands in and
+    whatever `clip_frac` is set to — the renderer then crops its band out of
+    this with almost no further loss.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    info = media_info(src)
+    if not info["has_video"]:
+        raise RenderError(f"{src} has no video stream")
+    vf = (f"fps={fps},scale={width}:{height}:force_original_aspect_ratio=increase,"
+          f"crop={width}:{height},setsar=1,format=yuv420p")
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(src), "-vf", vf,
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf),
+           "-an", "-movflags", "+faststart", str(dest)]
+    proc = subprocess.run(cmd, capture_output=quiet, text=True)
+    if proc.returncode != 0:
+        raise RenderError(f"gameplay normalise failed:\n"
+                          f"{(proc.stderr or '')[-800:]}")
+    return dest

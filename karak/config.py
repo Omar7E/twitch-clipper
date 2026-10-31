@@ -31,7 +31,11 @@ class ScoreConfig:
     dyn_weight: float = 0.15          # dynamic/peaky audio beats steady talking
 
     # window selection
-    count: int = 8                    # how many moments to return
+    count: int = 8                    # upper bound on clips, not a quota
+    adaptive: bool = True             # only keep moments that clear a quality bar
+    min_clips: int = 0                # 0 = allowed to say "nothing worth clipping"
+    select_k: float = 2.2             # how many MADs above the VOD's own median
+    select_floor: float = 0.45        # and at least this fraction of the VOD's peak
     min_len: float = 18.0
     max_len: float = 50.0
     pre_roll: float = 9.0             # seconds of build-up kept before the peak

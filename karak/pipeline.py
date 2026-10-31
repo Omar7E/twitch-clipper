@@ -85,7 +85,15 @@ def analyse(url_or_id: str, cfg: Config, *, work_base: Path | None = None,
     quiet_prof = audio_mod.silence_profile(feat)
     moments = pick_moments(curve, feat, cfg.score, duration, quiet_prof,
                            report=report)
-    _log(f"→ {len(moments)} moments selected", quiet)
+    if cfg.score.adaptive:
+        bar = moments[0].get("gate", 0.0) if moments else 0.0
+        _log(f"→ {len(moments)} moment(s) cleared the bar "
+             f"(score ≥ {bar:.2f}, cap {cfg.score.count})", quiet)
+        if not moments:
+            _log("  nothing in this VOD stood out enough to clip — try "
+                 "--set score.adaptive=false to force the top picks", quiet)
+    else:
+        _log(f"→ {len(moments)} moments selected", quiet)
 
     # 4. transcribe just the windows
     if captions and moments:

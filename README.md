@@ -46,6 +46,35 @@ A 63-minute VOD is ~2 GB at 1080p60. karak pulls the **audio-only** rendition
 first (~76 MB), analyses the whole stream from that, and then downloads video
 for just the windows that won. Analysing an hour-long VOD costs about a minute.
 
+## Deciding how many
+
+Picking a fixed "top 8" means the 8th clip on a quiet stream is noise. karak
+instead measures **prominence** — how far a moment towers over the minutes
+around it — and cuts the list where prominence falls off a cliff.
+
+The score curve is percentile-normalised, so every VOD spans 0..1 and an
+absolute threshold cannot tell a dull stream from a great one. Prominence can.
+On a real 63-minute VOD the top 7 moments scored 0.74–0.99 prominence and the
+8th dropped to 0.39 — that cliff is the cut. On synthetic streams with 2, 3 and
+5 planted moments it returns exactly 2, 3 and 5, and on pure noise it returns 0.
+
+```bash
+karak find <url> -n 4                      # cap it lower
+karak find <url> --set score.adaptive=false   # force exactly -n clips
+karak find <url> --set score.select_k=3.5     # stricter bar
+```
+
+## Gameplay filler
+
+```bash
+karak gameplay path/to/footage.mp4     # -> gameplay/footage_vertical.mp4
+```
+
+Converts any footage to a vertical 1080×1920 master by centre-cropping, so the
+same file works in either band at any `clip_frac`. Drop the results in
+`gameplay/`; karak picks a random start point per clip and rotates through the
+files round-robin.
+
 ## Install
 
 ```bash
@@ -60,8 +89,12 @@ come in as dependencies.
 ### 1. Analyse
 
 ```bash
-karak find https://www.twitch.tv/videos/123456789 -n 8
+karak find https://www.twitch.tv/videos/123456789
 ```
+
+**karak decides how many clips to make.** `-n` is a cap, not a quota. A stream
+with three standout moments gives three clips; a flat one can give none at all.
+See [Deciding how many](#deciding-how-many).
 
 Downloads audio + chat replay, scores the VOD, picks the moments, transcribes
 just those windows, and writes `work/<vod-id>/moments.json`.
