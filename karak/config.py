@@ -49,7 +49,7 @@ class RenderConfig:
     height: int = 1920
     fps: int = 30
 
-    layout: str = "gameplay-top"      # gameplay-top | gameplay-bottom
+    layout: str = "gameplay-bottom"   # gameplay-bottom = stream clip on top
     clip_frac: float = 0.52           # share of the canvas given to the stream clip
     clip_fit: str = "contain-blur"    # contain-blur | cover
     clip_crop: str = ""               # optional "w:h:x:y" crop of the source first
@@ -61,7 +61,7 @@ class RenderConfig:
     caption_style: str = "pop"        # pop | highlight | boxed
     caption_accent: str = "#FFD93D"
     words_per_line: int = 3
-    caption_y_frac: float = 0.78      # vertical position inside the canvas
+    caption_y_frac: float = 0.84      # vertical position *within the clip band*
 
     title_size: int = 80
     title_wrap: int = 24
@@ -71,6 +71,9 @@ class RenderConfig:
     follow_text: str = "FOLLOW TPCFP ON TWITCH"
     follow_size: int = 62
     follow_bg: str = "#9146FF"
+    follow_position: str = "seam"     # seam | top | bottom
+    follow_rotation: float = -3.0     # slight tilt reads as a sticker
+    follow_pulse: bool = True         # gentle scale pulse to catch the eye
 
     # audio
     gameplay_volume: float = 0.0      # 0 = muted gameplay

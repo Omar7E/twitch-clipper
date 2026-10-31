@@ -99,7 +99,7 @@ def _styles(cfg: RenderConfig) -> list[str]:
         f"{title_bg},{title_bg},0,0,0,0,100,100,1,0,3,14,0,8,50,50,0,1",
         # follow banner
         f"Style: Follow,{cfg.font},{cfg.follow_size},{white},{white},"
-        f"{follow_bg},{follow_bg},0,0,0,0,100,100,2,0,3,12,0,2,40,40,28,1",
+        f"{follow_bg},{follow_bg},0,0,0,0,100,100,2,0,3,14,0,5,40,40,0,1",
     ]
     return rows
 
@@ -112,8 +112,17 @@ def _caption_events(words: list[dict], cfg: RenderConfig, geo: Geometry,
     white = ass_tag_color("#FFFFFF")
     black = ass_tag_color("#000000")
     dark = ass_tag_color("#101010")
-    y = int(round(geo.height * cfg.caption_y_frac))
-    y = max(geo.clip_top + cfg.caption_size, min(geo.clip_bottom - cfg.caption_size // 2, y))
+    y = geo.clip_top + int(round(geo.clip_height * cfg.caption_y_frac))
+    lo = geo.clip_top + cfg.caption_size // 2
+    hi = geo.clip_bottom - cfg.caption_size // 2
+    if cfg.follow_position == "seam":
+        # the badge straddles the seam; keep captions clear of it
+        badge = int(cfg.follow_size * 0.9) + cfg.caption_size // 2
+        if cfg.layout == "gameplay-bottom":
+            hi = min(hi, geo.clip_bottom - badge)
+        else:
+            lo = max(lo, geo.clip_top + badge)
+    y = int(max(lo, min(hi, y))) if hi > lo else int((lo + hi) // 2)
     pos = f"\\an5\\pos({geo.width // 2},{y})"
 
     lines = [ln for ln in group_lines(words, per_line=cfg.words_per_line) if ln]
@@ -169,11 +178,36 @@ def _title_events(title: str, cfg: RenderConfig, geo: Geometry,
     ]
 
 
-def _follow_events(cfg: RenderConfig, duration: float) -> list[str]:
+def _follow_events(cfg: RenderConfig, geo: Geometry, duration: float) -> list[str]:
+    """The follow call-out. Placed on the seam by default: that is the optical
+    centre of the frame and the one place a viewer's eye always passes."""
     text = cfg.follow_text.strip()
     if not text:
         return []
-    return [f"Dialogue: 1,{ts(0.0)},{ts(duration)},Follow,,0,0,0,,{esc(text)}"]
+
+    if cfg.follow_position == "bottom":
+        y = geo.height - int(cfg.follow_size * 0.9)
+    elif cfg.follow_position == "top":
+        y = int(cfg.follow_size * 1.0) + 24
+    elif cfg.follow_position == "seam":
+        # straddle the boundary between the two panels
+        y = geo.clip_bottom if cfg.layout == "gameplay-bottom" else geo.clip_top
+        y = max(cfg.follow_size, min(geo.height - cfg.follow_size, y))
+    else:
+        raise ValueError(f"unknown follow_position {cfg.follow_position!r} "
+                         "(expected seam, top or bottom)")
+
+    tags = [f"\\an5\\pos({geo.width // 2},{y})"]
+    if abs(cfg.follow_rotation) > 0.01:
+        tags.append(f"\\frz{cfg.follow_rotation:g}")
+    if cfg.follow_pulse:
+        # breathe between 100% and 106% so it reads as alive, not flashing
+        half = max(0.6, min(1.4, duration / 6.0))
+        a, b = int(half * 1000), int(half * 2000)
+        tags.append(f"\\t(0,{a},\\fscx106\\fscy106)"
+                    f"\\t({a},{b},\\fscx100\\fscy100)")
+    return [f"Dialogue: 2,{ts(0.0)},{ts(duration)},Follow,,0,0,0,,"
+            f"{{{''.join(tags)}}}{esc(text)}"]
 
 
 def build_ass(dest: Path, *, words: list[dict], title: str, duration: float,
@@ -197,7 +231,7 @@ def build_ass(dest: Path, *, words: list[dict], title: str, duration: float,
     ]
     body = (_caption_events(words, cfg, geo, duration)
             + _title_events(title, cfg, geo, duration)
-            + _follow_events(cfg, duration))
+            + _follow_events(cfg, geo, duration))
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text("\n".join(head + body) + "\n", encoding="utf-8")
     return dest

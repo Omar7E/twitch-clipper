@@ -73,12 +73,29 @@ just those windows, and writes `work/<vod-id>/moments.json`.
  2      47:32    22s   0.77     24  SHE DON'T SIT DOWN
 ```
 
-### 2. Review and fix the titles
+### 2. Write the titles
 
-Titles are the one part a machine is worst at. Edit the `title` field of any
-moment in `moments.json` before rendering — that text is what gets burned on
-screen. If `ANTHROPIC_API_KEY` is set, Claude writes them instead of the
-built-in heuristic (`--no-claude` to always skip it).
+The title is the line that tells a scroller what they're about to watch —
+*"TPCFP ACCIDENTALLY KILLS SOMEONE'S CRY EMOJI"*. It describes the **event**,
+in the third person. It is not a quote of what the streamer said.
+
+```bash
+karak show --full          # transcript + loudest chat for every moment
+karak title 1 "TPCFP ACCIDENTALLY KILLS SOMEONE'S CRY EMOJI"
+```
+
+`show --full` prints what was said and what chat said, which is usually enough
+to work out what happened — chat is often the better clue. Then set the line
+with `karak title`.
+
+Three ways to get titles, best first:
+
+1. **Write them yourself** from `karak show --full`. Free, and always the best.
+2. **Set `ANTHROPIC_API_KEY`** and Claude writes them from the same evidence,
+   briefed to describe the event rather than quote it.
+3. **The built-in heuristic** runs when neither applies. It picks the punchiest
+   line of speech, which is serviceable but *will* quote rather than describe —
+   treat it as a placeholder.
 
 ### 3. Render
 
@@ -100,15 +117,20 @@ karak auto https://www.twitch.tv/videos/123456789 --gameplay gameplay/
 
 ```
 ┌──────────────┐
-│  gameplay    │  gameplay-top (default), 48% of the frame
-├──────────────┤
-│ ┌──────────┐ │  ← title card: what happened
+│ ┌──────────┐ │  ← title card: what happens in this clip
 │ │  stream  │ │
-│ │   clip   │ │  ← word-by-word captions, active word in accent colour
+│ │   clip   │ │  52% of the frame
+│ │          │ │  ← word-by-word captions, active word in accent colour
 │ └──────────┘ │
-│  FOLLOW ...  │  ← follow banner, pinned for the whole clip
+│══ FOLLOW ═══ │  ← follow badge on the seam: optical centre, tilted, pulsing
+│  gameplay    │
+│              │  Subway Surfers / GTA
 └──────────────┘
 ```
+
+Flip the panels with `--set render.layout=gameplay-top`. Move the badge with
+`--set render.follow_position=top` (or `bottom`). Captions automatically keep
+clear of the badge wherever it sits.
 
 The clip is letterboxed into its band over a blurred, darkened copy of itself
 (`contain-blur`) so nothing is cropped away. Use `--set render.clip_fit=cover`
@@ -137,6 +159,9 @@ Worth knowing:
 | `score.min_gap` | 25 | stops two clips covering one event |
 | `render.clip_frac` | 0.52 | share of the frame given to the stream |
 | `render.caption_style` | `pop` | `pop`, `highlight` or `boxed` |
+| `render.layout` | `gameplay-bottom` | clip on top; `gameplay-top` flips it |
+| `render.follow_position` | `seam` | `seam`, `top` or `bottom` |
+| `render.follow_text` | `FOLLOW TPCFP ON TWITCH` | e.g. `SUB TO TPCFP` |
 | `render.words_per_line` | 3 | caption words on screen at once |
 | `render.gameplay_volume` | 0.0 | mix gameplay audio in (0 = muted) |
 | `whisper_model` | `small` | `tiny`/`base`/`small`/`medium` |

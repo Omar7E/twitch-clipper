@@ -49,6 +49,25 @@ def _resolve_moments(args) -> Path:
     return found[-1]
 
 
+def _print_full(path: Path) -> None:
+    """Everything needed to write a title: what was said, what chat said."""
+    data = json.loads(path.read_text())
+    print(f"\n{data['vod']['channel']} — {data['vod']['title']}\n")
+    for m in data["moments"]:
+        mm, ss = divmod(int(m["start"]), 60)
+        words = " ".join(w["word"] for w in (m.get("words") or [])) or "(no speech)"
+        print(f"── #{m['rank']}  {mm:02d}:{ss:02d}  {m['duration']:.0f}s  "
+              f"score {m['score']:.2f}  chat {m.get('chat_count', 0)}")
+        print(f"   title now : {m.get('title') or '(none)'}")
+        print(f"   said      : {words[:400]}")
+        sample = m.get("chat_sample") or []
+        if sample:
+            joined = " | ".join(c["text"][:34] for c in sample[:10])
+            print(f"   chat      : {joined[:400]}")
+        print()
+    print(f"set one with:  karak title <#> \"YOUR TEXT\"")
+
+
 def _print_table(path: Path) -> None:
     data = json.loads(path.read_text())
     vod = data["vod"]
@@ -116,6 +135,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--vod", help="VOD url or id (default: most recent analysis)")
     s.add_argument("--moments", help="path to a moments.json")
     s.add_argument("--work", type=Path, default=None)
+    s.add_argument("--full", action="store_true",
+                   help="also show transcript and chat for each moment")
+
+    t = sub.add_parser("title", help="set the on-screen title for one moment")
+    t.add_argument("rank", type=int, help="moment number, as shown by `karak show`")
+    t.add_argument("text", help="the caption to burn on screen")
+    t.add_argument("--vod", help="VOD url or id (default: most recent analysis)")
+    t.add_argument("--moments", help="path to a moments.json")
+    t.add_argument("--work", type=Path, default=None)
 
     r = sub.add_parser("render", help="cut and render the selected moments")
     r.add_argument("--vod", help="VOD url or id (default: most recent analysis)")
@@ -141,7 +169,24 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.cmd == "show":
-        _print_table(_resolve_moments(args))
+        path = _resolve_moments(args)
+        if getattr(args, "full", False):
+            _print_full(path)
+        else:
+            _print_table(path)
+        return 0
+
+    if args.cmd == "title":
+        path = _resolve_moments(args)
+        data = json.loads(path.read_text())
+        hit = next((m for m in data["moments"] if m["rank"] == args.rank), None)
+        if hit is None:
+            raise SystemExit(f"no moment #{args.rank} "
+                             f"(have 1..{len(data['moments'])})")
+        hit["title"] = args.text.strip()
+        hit["title_source"] = "manual"
+        path.write_text(json.dumps(data, indent=2))
+        print(f"#{args.rank} title set to: {hit['title']}")
         return 0
 
     cfg = _load_cfg(args)

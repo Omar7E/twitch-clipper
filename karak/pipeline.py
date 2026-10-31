@@ -111,7 +111,8 @@ def analyse(url_or_id: str, cfg: Config, *, work_base: Path | None = None,
             m["words"] = []
 
     # 5. titles
-    titles, source = make_titles(moments, comments, use_claude=use_claude)
+    titles, source = make_titles(moments, comments, use_claude=use_claude,
+                                 streamer=meta.channel)
     for m, t in zip(moments, titles):
         m["title"] = t
         m["title_source"] = source

@@ -87,22 +87,44 @@ def heuristic_title(words: list[dict], comments: list[dict],
     return ""
 
 
-def _claude_titles(items: list[dict], model: str) -> list[str] | None:
+TITLE_BRIEF = """You write the on-screen caption for Twitch highlight clips.
+
+The caption says WHAT HAPPENS, in the third person, like a narrator telling
+someone what they are about to watch. It is NOT a quote of what the streamer
+said.
+
+Good: {streamer} ACCIDENTALLY KILLS HIS OWN TEAMMATE
+Good: CHAT SPAMS L AFTER THIS WHIFF
+Good: {streamer} CLUTCHES 1V3 ON 5 HP
+Bad:  "I'M REALLY NOT I'M ACTUALLY 55 HP"   (a quote, not a description)
+Bad:  FUNNY MOMENT                          (says nothing)
+
+Rules:
+- describe the event, third person, present tense
+- 3 to 7 words, UPPERCASE
+- no emoji, no quotes, no hashtags, no trailing punctuation
+- use the streamer's name where it reads naturally
+- if the clip is unclear, describe the reaction instead of inventing an event
+
+You get a transcript of what was said and the loudest chat messages. Chat is
+often the best clue to what actually happened on screen.
+"""
+
+
+def _claude_titles(items: list[dict], model: str, streamer: str) -> list[str] | None:
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         return None
     lines = []
     for i, it in enumerate(items, 1):
         lines.append(
-            f"{i}. transcript: {it['transcript'][:600] or '(no speech detected)'}\n"
-            f"   top chat: {it['chat'][:300] or '(no chat)'}"
+            f"{i}. said: {it['transcript'][:600] or '(no speech)'}\n"
+            f"   chat: {it['chat'][:300] or '(no chat)'}"
         )
     prompt = (
-        "You title clips for a Twitch highlight channel. For each numbered moment "
-        "below, write ONE punchy on-screen caption describing what happens: max 6 "
-        "words, uppercase, no emoji, no quotes, no hashtags, no trailing period. "
-        "Make someone want to watch. Reply with ONLY a JSON array of strings, one "
-        "per moment, in order.\n\n" + "\n".join(lines)
+        TITLE_BRIEF.replace("{streamer}", (streamer or "the streamer").upper())
+        + "\nWrite one caption per numbered moment. Reply with ONLY a JSON "
+          "array of strings, in order.\n\n" + "\n".join(lines)
     )
     body = json.dumps({
         "model": model,
@@ -130,7 +152,7 @@ def _claude_titles(items: list[dict], model: str) -> list[str] | None:
 
 
 def make_titles(moments: list[dict], comments: list[dict], *,
-                use_claude: bool = True,
+                use_claude: bool = True, streamer: str = "",
                 model: str = "claude-sonnet-5-5") -> tuple[list[str], str]:
     """Return (titles, source) where source is 'claude' or 'heuristic'."""
     items = []
@@ -143,7 +165,7 @@ def make_titles(moments: list[dict], comments: list[dict], *,
         items.append({"transcript": transcript, "chat": chat})
 
     if use_claude and items:
-        got = _claude_titles(items, model)
+        got = _claude_titles(items, model, streamer)
         if got and len(got) >= len(items):
             return got[:len(items)], "claude"
 
