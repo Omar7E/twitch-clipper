@@ -1,4 +1,4 @@
-# karak
+# twitch-clipper
 
 Find the best moments in a Twitch VOD and cut them into vertical clips —
 word-by-word captions, a title card saying what happened, a follow banner, and
@@ -7,15 +7,15 @@ Subway Surfers / GTA gameplay filler stacked above the clip.
 Give it a VOD link, get back ranked, ready-to-post 1080×1920 MP4s.
 
 ```bash
-karak find https://www.twitch.tv/videos/123456789
-karak show                                    # review + edit the picks
-karak render --gameplay gameplay/             # cut and render them
+clipper find https://www.twitch.tv/videos/123456789
+clipper show                                    # review + edit the picks
+clipper render --gameplay gameplay/             # cut and render them
 ```
 
 ## How it finds the moments
 
 Most clipping tools read the transcript and ask an LLM what sounds interesting.
-That misses the clutch 1v3 where nobody says a word. karak blends two signals
+That misses the clutch 1v3 where nobody says a word. clipper blends two signals
 that actually track hype on a gameplay stream:
 
 **Chat reaction (weight 0.6)** — pulled from Twitch's chat replay, no account or
@@ -38,17 +38,17 @@ suppression so you never get two clips of the same event, and the cut points
 snap to the quietest frame nearby so clips don't start mid-word.
 
 If chat is too sparse to trust (`< chat_min_rate` msgs/min, or fewer than 2
-chatters) karak says so and falls back to audio alone.
+chatters) clipper says so and falls back to audio alone.
 
 ## It only downloads what it needs
 
-A 63-minute VOD is ~2 GB at 1080p60. karak pulls the **audio-only** rendition
+A 63-minute VOD is ~2 GB at 1080p60. clipper pulls the **audio-only** rendition
 first (~76 MB), analyses the whole stream from that, and then downloads video
 for just the windows that won. Analysing an hour-long VOD costs about a minute.
 
 ## Deciding how many
 
-Picking a fixed "top 8" means the 8th clip on a quiet stream is noise. karak
+Picking a fixed "top 8" means the 8th clip on a quiet stream is noise. clipper
 instead measures **prominence** — how far a moment towers over the minutes
 around it — and cuts the list where prominence falls off a cliff.
 
@@ -59,20 +59,20 @@ On a real 63-minute VOD the top 7 moments scored 0.74–0.99 prominence and the
 5 planted moments it returns exactly 2, 3 and 5, and on pure noise it returns 0.
 
 ```bash
-karak find <url> -n 4                      # cap it lower
-karak find <url> --set score.adaptive=false   # force exactly -n clips
-karak find <url> --set score.select_k=3.5     # stricter bar
+clipper find <url> -n 4                      # cap it lower
+clipper find <url> --set score.adaptive=false   # force exactly -n clips
+clipper find <url> --set score.select_k=3.5     # stricter bar
 ```
 
 ## Gameplay filler
 
 ```bash
-karak gameplay path/to/footage.mp4     # -> gameplay/footage_vertical.mp4
+clipper gameplay path/to/footage.mp4     # -> gameplay/footage_vertical.mp4
 ```
 
 Converts any footage to a vertical 1080×1920 master by centre-cropping, so the
 same file works in either band at any `clip_frac`. Drop the results in
-`gameplay/`; karak picks a random start point per clip and rotates through the
+`gameplay/`; clipper picks a random start point per clip and rotates through the
 files round-robin.
 
 ## Install
@@ -89,10 +89,10 @@ come in as dependencies.
 ### 1. Analyse
 
 ```bash
-karak find https://www.twitch.tv/videos/123456789
+clipper find https://www.twitch.tv/videos/123456789
 ```
 
-**karak decides how many clips to make.** `-n` is a cap, not a quota. A stream
+**clipper decides how many clips to make.** `-n` is a cap, not a quota. A stream
 with three standout moments gives three clips; a flat one can give none at all.
 See [Deciding how many](#deciding-how-many).
 
@@ -113,17 +113,17 @@ The title is the line that tells a scroller what they're about to watch —
 in the third person. It is not a quote of what the streamer said.
 
 ```bash
-karak show --full          # transcript + loudest chat for every moment
-karak title 1 "TPCFP ACCIDENTALLY KILLS SOMEONE'S CRY EMOJI"
+clipper show --full          # transcript + loudest chat for every moment
+clipper title 1 "TPCFP ACCIDENTALLY KILLS SOMEONE'S CRY EMOJI"
 ```
 
 `show --full` prints what was said and what chat said, which is usually enough
 to work out what happened — chat is often the better clue. Then set the line
-with `karak title`.
+with `clipper title`.
 
 Three ways to get titles, best first:
 
-1. **Write them yourself** from `karak show --full`. Free, and always the best.
+1. **Write them yourself** from `clipper show --full`. Free, and always the best.
 2. **Set `ANTHROPIC_API_KEY`** and Claude writes them from the same evidence,
    briefed to describe the event rather than quote it.
 3. **The built-in heuristic** runs when neither applies. It picks the punchiest
@@ -133,17 +133,17 @@ Three ways to get titles, best first:
 ### 3. Render
 
 ```bash
-karak render --gameplay gameplay/ --only 1,2,3
+clipper render --gameplay gameplay/ --only 1,2,3
 ```
 
-Drop your Subway Surfers / GTA footage in `gameplay/`. karak picks a **random
+Drop your Subway Surfers / GTA footage in `gameplay/`. clipper picks a **random
 start point** in each file so clips don't reuse the same footage, and assigns
 files round-robin. See `gameplay/README.md`.
 
 Or do both at once:
 
 ```bash
-karak auto https://www.twitch.tv/videos/123456789 --gameplay gameplay/
+clipper auto https://www.twitch.tv/videos/123456789 --gameplay gameplay/
 ```
 
 ## The layout
@@ -175,7 +175,7 @@ Any field can be overridden with `--set section.key=value`, or collected in a
 JSON file passed with `--config`.
 
 ```bash
-karak render --gameplay gameplay/ \
+clipper render --gameplay gameplay/ \
   --set render.layout=gameplay-bottom \
   --set render.caption_style=boxed \
   --set render.caption_accent='#00E5FF' \

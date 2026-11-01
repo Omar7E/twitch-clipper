@@ -1,4 +1,4 @@
-"""karak command line."""
+"""twitch-clipper command line."""
 from __future__ import annotations
 
 import argparse
@@ -40,12 +40,12 @@ def _resolve_moments(args) -> Path:
     if getattr(args, "vod", None):
         p = work_dir_for(parse_vod_id(args.vod), args.work) / "moments.json"
         if not p.exists():
-            raise SystemExit(f"no analysis yet for that VOD — run `karak find` first "
+            raise SystemExit(f"no analysis yet for that VOD — run `clipper find` first "
                              f"(looked in {p})")
         return p
     found = sorted(base.glob("*/moments.json"), key=lambda p: p.stat().st_mtime)
     if not found:
-        raise SystemExit("nothing analysed yet — run `karak find <twitch-vod-url>` first")
+        raise SystemExit("nothing analysed yet — run `clipper find <twitch-vod-url>` first")
     return found[-1]
 
 
@@ -65,7 +65,7 @@ def _print_full(path: Path) -> None:
             joined = " | ".join(c["text"][:34] for c in sample[:10])
             print(f"   chat      : {joined[:400]}")
         print()
-    print(f"set one with:  karak title <#> \"YOUR TEXT\"")
+    print(f"set one with:  clipper title <#> \"YOUR TEXT\"")
 
 
 def _print_table(path: Path) -> None:
@@ -110,15 +110,15 @@ def _parse_only(s: str | None) -> list[int] | None:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="karak",
+        prog="clipper",
         description="Find the best moments in a Twitch VOD and cut them into "
                     "vertical clips with captions and gameplay filler.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""examples:
-  karak find https://www.twitch.tv/videos/123456789
-  karak show
-  karak render --gameplay gameplay/ --only 1,2,3
-  karak auto https://www.twitch.tv/videos/123456789 --gameplay gameplay/
+  clipper find https://www.twitch.tv/videos/123456789
+  clipper show
+  clipper render --gameplay gameplay/ --only 1,2,3
+  clipper auto https://www.twitch.tv/videos/123456789 --gameplay gameplay/
 """)
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -139,7 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="also show transcript and chat for each moment")
 
     t = sub.add_parser("title", help="set the on-screen title for one moment")
-    t.add_argument("rank", type=int, help="moment number, as shown by `karak show`")
+    t.add_argument("rank", type=int, help="moment number, as shown by `clipper show`")
     t.add_argument("text", help="the caption to burn on screen")
     t.add_argument("--vod", help="VOD url or id (default: most recent analysis)")
     t.add_argument("--moments", help="path to a moments.json")
@@ -226,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             if args.cmd == "find":
                 _print_table(moments_file)
-                print("\nnext: karak render --gameplay gameplay/")
+                print("\nnext: clipper render --gameplay gameplay/")
                 return 0
         else:
             moments_file = _resolve_moments(args)
