@@ -300,14 +300,22 @@ def render_moments(moments_file: Path, cfg: Config, *,
             twitch.download_section(vod_id, ws, we, raw, fmt=fmt)
 
         src = raw
-        if len(segs) > 1:
+        # call build_cut whenever a plan exists: it decides for itself
+        # whether the segments already cover the whole window. Guarding on
+        # len(segs) > 1 here skipped trimming for single-segment plans and
+        # rendered the untrimmed window.
+        if segs:
             cut = work / "cuts" / f"{int(ws)}_{int(round(m['duration']))}_{len(segs)}.mp4"
-            if not is_playable(cut):
+            if is_playable(cut):
+                src = cut
+            else:
                 cut.unlink(missing_ok=True)
                 _log(f"  cutting {len(segs)} segments out of "
                      f"{we - ws:.0f}s of source…", quiet)
-                build_cut(raw, cut, segs, ws)
-            src = cut
+                # use the return value: when the segments already cover the
+                # whole window build_cut hands back the source and writes no
+                # cut file, so assuming `cut` exists would point at nothing
+                src = build_cut(raw, cut, segs, ws)
 
         info = media_info(src)
         duration = info["duration"] or m["duration"]
