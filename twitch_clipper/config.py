@@ -25,6 +25,11 @@ class ScoreConfig:
 
     # audio signal
     audio_weight: float = 0.4
+    # Impulsive-transient signal: gunfire, explosions, crashes. Off by
+    # default because on a talking or casual stream it finds nothing;
+    # raise it (0.3-0.5) for shooters, where the action is the gunfight
+    # and the streamer is often silent through the best of it.
+    combat_weight: float = 0.0
     baseline_seconds: float = 90.0    # rolling baseline for "louder than usual"
     loud_weight: float = 0.60
     hf_weight: float = 0.25           # shouting/laughing sits higher in the spectrum
@@ -88,9 +93,21 @@ class RenderConfig:
 
 
 @dataclass
+class VisualConfig:
+    """Verify candidates on screen before clipping them."""
+    enabled: bool = True
+    probe_seconds: float = 6.0     # how much of each candidate to decode
+    candidate_factor: float = 2.5  # shortlist this many times the final count
+    max_still_frac: float = 0.40   # above this the screen is frozen: reject
+    min_motion: float = 1.5        # below this nothing is really happening
+    motion_weight: float = 0.35    # how much motion counts in the final rank
+
+
+@dataclass
 class Config:
     score: ScoreConfig = field(default_factory=ScoreConfig)
     render: RenderConfig = field(default_factory=RenderConfig)
+    visual: VisualConfig = field(default_factory=VisualConfig)
     whisper_model: str = "small"
     whisper_lang: str | None = None
 
@@ -103,7 +120,8 @@ class Config:
         if not p.exists():
             raise FileNotFoundError(f"config not found: {p}")
         raw = json.loads(p.read_text())
-        for section, obj in (("score", cfg.score), ("render", cfg.render)):
+        for section, obj in (("score", cfg.score), ("render", cfg.render),
+                             ("visual", cfg.visual)):
             for k, v in (raw.get(section) or {}).items():
                 if not hasattr(obj, k):
                     raise ValueError(f"unknown {section} option: {k}")
@@ -115,7 +133,8 @@ class Config:
 
     def apply_overrides(self, pairs: list[str]) -> None:
         """Apply `--set score.count=12` style overrides."""
-        known = {"score": self.score, "render": self.render}
+        known = {"score": self.score, "render": self.render,
+                 "visual": self.visual}
         for pair in pairs:
             if "=" not in pair:
                 raise ValueError(f"--set expects section.key=value, got {pair!r}")
@@ -145,7 +164,9 @@ class Config:
 
     def to_dict(self) -> dict:
         return {"score": asdict(self.score), "render": asdict(self.render),
-                "whisper_model": self.whisper_model, "whisper_lang": self.whisper_lang}
+                "visual": asdict(self.visual),
+                "whisper_model": self.whisper_model,
+                "whisper_lang": self.whisper_lang}
 
 
 def font_path(cfg: RenderConfig) -> Path:

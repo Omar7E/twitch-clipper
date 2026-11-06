@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .audio import AudioFeatures, excitement, robust_norm, smooth
+from .audio import (AudioFeatures, combat_intensity, excitement,
+                    robust_norm, smooth)
 from .config import ScoreConfig
 
 
@@ -25,6 +26,12 @@ def blend(feat: AudioFeatures, chat_signal: np.ndarray | None, chat_stats: dict 
     )
     n = audio.size
     info: dict = {"audio_frames": n}
+
+    if cfg.combat_weight > 0:
+        fight = combat_intensity(feat, baseline_seconds=cfg.baseline_seconds)
+        audio = ((1.0 - cfg.combat_weight) * audio
+                 + cfg.combat_weight * fight).astype(audio.dtype)
+        info["combat_weight"] = cfg.combat_weight
 
     usable_chat = (
         chat_signal is not None

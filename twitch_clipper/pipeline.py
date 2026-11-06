@@ -13,6 +13,7 @@ from .config import Config
 from .render import find_gameplay, media_info, render_clip
 from .score import blend, pick_moments
 from .subtitles import build_ass
+from .visual import is_static, motion_stats
 from .titles import make_titles
 from .transcribe import TranscribeUnavailable, slice_wav, transcribe_words
 
@@ -83,7 +84,19 @@ def analyse(url_or_id: str, cfg: Config, *, work_base: Path | None = None,
         _log(f"  {info.get('chat_skip_reason', 'audio only')}", quiet)
 
     quiet_prof = audio_mod.silence_profile(feat)
-    moments = pick_moments(curve, feat, cfg.score, duration, quiet_prof,
+
+    # Shortlist more candidates than we need when we are going to look at
+    # them: audio cannot tell gameplay from talking over a pause screen.
+    pick_cfg = cfg.score
+    if cfg.visual.enabled:
+        from dataclasses import replace as _replace
+        wanted = max(cfg.score.count,
+                     int(round(cfg.score.count * cfg.visual.candidate_factor)))
+        # take the raw top-N and defer the quality cut until after we have
+        # looked at them, so rejected candidates are backfilled rather than
+        # just shrinking the result
+        pick_cfg = _replace(cfg.score, count=wanted, adaptive=False)
+    moments = pick_moments(curve, feat, pick_cfg, duration, quiet_prof,
                            report=report)
     if cfg.score.adaptive:
         bar = moments[0].get("gate", 0.0) if moments else 0.0
@@ -94,6 +107,10 @@ def analyse(url_or_id: str, cfg: Config, *, work_base: Path | None = None,
                  "--set score.adaptive=false to force the top picks", quiet)
     else:
         _log(f"→ {len(moments)} moments selected", quiet)
+
+    # 3b. look at each candidate before committing to it
+    if cfg.visual.enabled and moments:
+        moments = _verify_visually(vod_id, moments, work, cfg, quiet=quiet)
 
     # 4. transcribe just the windows
     if captions and moments:
@@ -149,6 +166,63 @@ def analyse(url_or_id: str, cfg: Config, *, work_base: Path | None = None,
     dest.write_text(json.dumps(out, indent=2))
     _log(f"✓ {dest}", quiet)
     return dest
+
+
+def _verify_visually(vod_id: str, moments: list[dict], work: Path, cfg: Config,
+                     *, quiet: bool = False) -> list[dict]:
+    """Decode a few seconds of each candidate and drop the static ones."""
+    vis = cfg.visual
+    _log(f"→ checking {len(moments)} candidates on screen…", quiet)
+    fmt = twitch.pick_format(vod_id)
+    kept: list[dict] = []
+    rejected = 0
+
+    for m in moments:
+        mid = (m["start"] + m["end"]) / 2.0
+        a = max(m["start"], mid - vis.probe_seconds / 2)
+        b = min(m["end"], a + vis.probe_seconds)
+        probe = work / "probes" / f"{int(m['start'])}.mp4"
+        try:
+            if not probe.exists():
+                twitch.download_section(vod_id, a, b, probe, fmt=fmt)
+            stats = motion_stats(probe)
+        except Exception as e:
+            _log(f"  probe at {m['start']:.0f}s failed ({e}); keeping it", quiet)
+            stats = None
+        m["visual"] = stats
+        if is_static(stats, vis.max_still_frac, vis.min_motion):
+            rejected += 1
+            _log(f"  ✗ {m['start'] / 60:.0f}min — static screen "
+                 f"(still {stats['still_frac']:.0%}, motion {stats['motion']:.1f})",
+                 quiet)
+            continue
+        kept.append(m)
+
+    if rejected:
+        _log(f"  dropped {rejected} candidate(s) with nothing happening on screen",
+             quiet)
+
+    # re-rank: how much is moving matters alongside how it sounds
+    motions = [m["visual"]["motion"] for m in kept if m.get("visual")]
+    top = max(motions) if motions else 0.0
+    for m in kept:
+        mo = (m["visual"]["motion"] / top) if (m.get("visual") and top > 0) else 0.0
+        m["motion_score"] = round(mo, 4)
+        m["audio_score"] = m["score"]
+        m["score"] = round((1 - vis.motion_weight) * m["score"]
+                           + vis.motion_weight * mo, 4)
+    kept.sort(key=lambda m: -m["score"])
+    # now apply the quality cut, on the survivors
+    if cfg.score.adaptive and len(kept) > max(cfg.score.min_clips, 1):
+        from .score import _knee
+        kept = kept[:_knee([m["prominence"] for m in kept],
+                           lo=max(cfg.score.min_clips, 1), hi=cfg.score.count)]
+    else:
+        kept = kept[:cfg.score.count]
+    for i, m in enumerate(kept, 1):
+        m["rank"] = i
+    _log(f"→ {len(kept)} moment(s) left after looking at them", quiet)
+    return kept
 
 
 def render_moments(moments_file: Path, cfg: Config, *,

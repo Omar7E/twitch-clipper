@@ -11,3 +11,6 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+
+# throwaway diagnostic scripts
+scratch/

@@ -21,6 +21,8 @@ class AudioFeatures:
     rms_db: np.ndarray      # loudness per frame
     hf: np.ndarray          # high-frequency energy ratio (shouting/laughter)
     times: np.ndarray
+    flux: np.ndarray        # positive spectral change in the gunfire band
+    crest: np.ndarray       # peak-to-RMS; impulsive sounds score high
 
     def __len__(self) -> int:
         return int(self.rms_db.shape[0])
@@ -48,9 +50,14 @@ def extract(path: Path, hop: float = 0.25) -> AudioFeatures:
     freqs = np.fft.rfftfreq(FFT, 1.0 / SR)
     hi_band = (freqs >= 2000) & (freqs <= 7500)
     all_band = freqs >= 50
+    # gunshots are impulsive and broadband; voiced speech is not
+    shot_band = (freqs >= 1500) & (freqs <= 7800)
 
     rms_list: list[float] = []
     hf_list: list[float] = []
+    flux_list: list[float] = []
+    crest_list: list[float] = []
+    prev_mag: np.ndarray | None = None
     tail = np.zeros(0, dtype=np.float32)
     read_bytes = hop_n * 2 * 64  # ~16s of audio per read
 
@@ -68,9 +75,22 @@ def extract(path: Path, hop: float = 0.25) -> AudioFeatures:
             frames = np.lib.stride_tricks.sliding_window_view(data, FFT)[idx]
             rms = np.sqrt(np.maximum((frames ** 2).mean(axis=1), 1e-12))
             rms_list.extend((20.0 * np.log10(rms)).tolist())
-            spec = np.abs(np.fft.rfft(frames * window, axis=1)) ** 2
+            mag = np.abs(np.fft.rfft(frames * window, axis=1))
+            spec = mag ** 2
             total = spec[:, all_band].sum(axis=1) + 1e-12
             hf_list.extend((spec[:, hi_band].sum(axis=1) / total).tolist())
+
+            # spectral flux: only energy that ARRIVES counts, so sustained
+            # speech scores low while each gunshot onset spikes
+            band = mag[:, shot_band]
+            prev = prev_mag if prev_mag is not None else band[0:1]
+            stacked = np.vstack([prev, band[:-1]]) if band.shape[0] > 1 else prev
+            diff = np.maximum(band - stacked, 0.0)
+            flux_list.extend(diff.sum(axis=1).tolist())
+            prev_mag = band[-1:].copy()
+
+            peak = np.abs(frames).max(axis=1)
+            crest_list.extend((peak / np.maximum(rms, 1e-6)).tolist())
             consumed = idx[-1] + hop_n
             data = data[consumed:]
         tail = data
@@ -82,8 +102,16 @@ def extract(path: Path, hop: float = 0.25) -> AudioFeatures:
 
     rms_db = np.asarray(rms_list, dtype=np.float32)
     hf = np.asarray(hf_list, dtype=np.float32)
-    times = np.arange(rms_db.size, dtype=np.float32) * hop
-    return AudioFeatures(hop=hop, rms_db=rms_db, hf=hf, times=times)
+    n = rms_db.size
+    flux = np.asarray(flux_list, dtype=np.float32)[:n]
+    crest = np.asarray(crest_list, dtype=np.float32)[:n]
+    if flux.size < n:
+        flux = np.pad(flux, (0, n - flux.size), mode="edge")
+    if crest.size < n:
+        crest = np.pad(crest, (0, n - crest.size), mode="edge")
+    times = np.arange(n, dtype=np.float32) * hop
+    return AudioFeatures(hop=hop, rms_db=rms_db, hf=hf, times=times,
+                         flux=flux, crest=crest)
 
 
 def rolling_median(x: np.ndarray, win: int) -> np.ndarray:
@@ -146,3 +174,27 @@ def excitement(feat: AudioFeatures, *, baseline_seconds: float = 90.0,
 def silence_profile(feat: AudioFeatures) -> np.ndarray:
     """Per-frame quietness, used to snap clip boundaries to natural pauses."""
     return (-robust_norm(feat.rms_db)).astype(np.float32) + 1.0
+
+
+def combat_intensity(feat: AudioFeatures, *, baseline_seconds: float = 90.0,
+                     flux_weight: float = 0.6, crest_weight: float = 0.4,
+                     burst_seconds: float = 2.5) -> np.ndarray:
+    """How much of a firefight is happening, as opposed to someone talking.
+
+    Gunfire is a train of sharp broadband transients: each shot dumps energy
+    across 1.5-8 kHz in a few milliseconds. Spectral flux counts only energy
+    that newly arrives, so a sustained voice barely registers while every
+    shot spikes it. Crest factor separates them further — impulsive audio has
+    a far higher peak-to-RMS ratio than speech at the same loudness.
+    """
+    win = max(3, int(baseline_seconds / max(feat.hop, 1e-6)))
+    flux = feat.flux - rolling_median(feat.flux, win)
+    crest = feat.crest - rolling_median(feat.crest, win)
+
+    # a firefight is a burst of these, not one tick, so pool over a window
+    burst = max(1, int(burst_seconds / max(feat.hop, 1e-6)))
+    flux_b = smooth(np.maximum(flux, 0.0), burst)
+    crest_b = smooth(np.maximum(crest, 0.0), burst)
+
+    score = flux_weight * robust_norm(flux_b) + crest_weight * robust_norm(crest_b)
+    return (score / max(flux_weight + crest_weight, 1e-9)).astype(np.float32)
