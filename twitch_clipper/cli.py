@@ -94,6 +94,19 @@ def _print_table(path: Path) -> None:
     print(f"\nedit titles in: {path}")
 
 
+def parse_timestamp(text: str) -> float:
+    """Accept 1:56:20, 56:20 or a bare number of seconds."""
+    text = text.strip()
+    if ":" not in text:
+        return float(text)
+    bits = [float(x) for x in text.split(":")]
+    if len(bits) == 2:
+        return bits[0] * 60 + bits[1]
+    if len(bits) == 3:
+        return bits[0] * 3600 + bits[1] * 60 + bits[2]
+    raise ValueError(f"cannot read timestamp {text!r}")
+
+
 def _parse_only(s: str | None) -> list[int] | None:
     if not s:
         return None
@@ -144,6 +157,19 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--vod", help="VOD url or id (default: most recent analysis)")
     t.add_argument("--moments", help="path to a moments.json")
     t.add_argument("--work", type=Path, default=None)
+
+    ad = sub.add_parser("add", help="add a moment by hand at a timestamp")
+    ad.add_argument("at", help="where it happens: 1:56:20, 56:20 or 6980")
+    ad.add_argument("--title", default="", help="on-screen caption")
+    ad.add_argument("--window", type=float, default=None,
+                    help="seconds of source to consider (default: clip.window)")
+    ad.add_argument("--vod", help="VOD url or id (default: most recent analysis)")
+    ad.add_argument("--moments", help="path to a moments.json")
+    ad.add_argument("--work", type=Path, default=None)
+    ad.add_argument("--set", dest="overrides", action="append", default=[],
+                    metavar="k=v")
+    ad.add_argument("--config", default=None)
+    ad.add_argument("-q", "--quiet", action="store_true")
 
     r = sub.add_parser("render", help="cut and render the selected moments")
     r.add_argument("--vod", help="VOD url or id (default: most recent analysis)")
@@ -210,6 +236,51 @@ def main(argv: list[str] | None = None) -> int:
             normalise_gameplay(src, dest)
             print(f"  ✓ {dest.stat().st_size / 1e6:.1f} MB  1080x1920")
         print(f"\nready in {out}")
+        return 0
+
+    if args.cmd == "add":
+        import numpy as np
+        from .segments import plan_segments
+        cfg = _load_cfg(args)
+        path = _resolve_moments(args)
+        data = json.loads(path.read_text())
+        at = parse_timestamp(args.at)
+        vod_dur = float(data["vod"].get("duration") or 0) or (at + 120)
+        width = args.window or cfg.clip.window
+        ws = max(0.0, at - width * 0.45)
+        we = min(vod_dur, ws + width)
+        ws = max(0.0, we - width)
+
+        sig = path.parent / "signals.npz"
+        segs = [(ws, we)]
+        if sig.exists() and cfg.clip.multi_cut:
+            z = np.load(sig)
+            segs = plan_segments(z["curve"], float(z["hop"]), ws, we,
+                                 target=cfg.clip.target_duration,
+                                 min_segment=cfg.clip.min_segment,
+                                 merge_gap=cfg.clip.merge_gap,
+                                 max_segments=cfg.clip.max_segments,
+                                 quiet=z["quiet"])
+        moment = {
+            "rank": 0, "peak": round(at, 2),
+            "start": round(ws, 2), "end": round(we, 2),
+            "window_start": round(ws, 2), "window_end": round(we, 2),
+            "segments": [[a, b] for a, b in segs],
+            "duration": round(sum(b - a for a, b in segs), 2),
+            "score": 1.0, "prominence": 1.0, "mean_score": 1.0,
+            "title": args.title.strip(), "title_source": "manual",
+            "words": [], "chat_count": 0, "chat_sample": [], "manual": True,
+        }
+        data["moments"].append(moment)
+        data["moments"].sort(key=lambda m: -m.get("score", 0))
+        for i, m in enumerate(data["moments"], 1):
+            m["rank"] = i
+        path.write_text(json.dumps(data, indent=2))
+        mm, ss = divmod(int(at), 60)
+        print(f"added moment at {mm}:{ss:02d} — {len(segs)} segment(s), "
+              f"{moment['duration']:.0f}s from a {width:.0f}s window")
+        print(f"transcribe + render it with: clipper render --only "
+              f"{next(m['rank'] for m in data['moments'] if m.get('manual'))}")
         return 0
 
     cfg = _load_cfg(args)

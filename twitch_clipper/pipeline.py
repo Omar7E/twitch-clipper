@@ -13,6 +13,7 @@ from .config import Config
 from .render import find_gameplay, media_info, render_clip
 from .score import blend, pick_moments
 from .subtitles import build_ass
+from .segments import build_cut, plan_segments, remap_words
 from .visual import is_static, motion_stats
 from .titles import make_titles
 from .transcribe import TranscribeUnavailable, slice_wav, transcribe_words
@@ -84,6 +85,9 @@ def analyse(url_or_id: str, cfg: Config, *, work_base: Path | None = None,
         _log(f"  {info.get('chat_skip_reason', 'audio only')}", quiet)
 
     quiet_prof = audio_mod.silence_profile(feat)
+    import numpy as _np
+    _np.savez_compressed(work / "signals.npz", curve=curve, report=report,
+                         quiet=quiet_prof, hop=_np.float32(feat.hop))
 
     # Shortlist more candidates than we need when we are going to look at
     # them: audio cannot tell gameplay from talking over a pause screen.
@@ -108,6 +112,24 @@ def analyse(url_or_id: str, cfg: Config, *, work_base: Path | None = None,
     else:
         _log(f"→ {len(moments)} moments selected", quiet)
 
+    # 3a. widen each pick and plan where to cut inside it
+    if cfg.clip.multi_cut:
+        for m in moments:
+            peak = m.get("peak", (m["start"] + m["end"]) / 2)
+            ws = max(0.0, peak - cfg.clip.window * 0.45)
+            we = min(duration, ws + cfg.clip.window)
+            ws = max(0.0, we - cfg.clip.window)
+            segs = plan_segments(curve, feat.hop, ws, we,
+                                 target=cfg.clip.target_duration,
+                                 min_segment=cfg.clip.min_segment,
+                                 merge_gap=cfg.clip.merge_gap,
+                                 max_segments=cfg.clip.max_segments,
+                                 quiet=quiet_prof)
+            m["window_start"], m["window_end"] = round(ws, 2), round(we, 2)
+            m["segments"] = [[s_, e_] for s_, e_ in segs]
+            m["duration"] = round(sum(e_ - s_ for s_, e_ in segs), 2)
+            m["start"], m["end"] = round(ws, 2), round(we, 2)
+
     # 3b. look at each candidate before committing to it
     if cfg.visual.enabled and moments:
         moments = _verify_visually(vod_id, moments, work, cfg, quiet=quiet)
@@ -120,9 +142,13 @@ def analyse(url_or_id: str, cfg: Config, *, work_base: Path | None = None,
             wav = work / "slices" / f"{i:02d}.wav"
             try:
                 slice_wav(audio_path, m["start"], m["end"], wav)
-                m["words"] = transcribe_words(
+                said = transcribe_words(
                     wav, model_size=cfg.whisper_model, language=cfg.whisper_lang)
-                _log(f"  [{i}/{len(moments)}] {len(m['words'])} words", quiet)
+                segs = [(a, b) for a, b in (m.get("segments") or
+                                            [[m["start"], m["end"]]])]
+                m["words"] = remap_words(said, segs, m["start"])
+                _log(f"  [{i}/{len(moments)}] {len(said)} words "
+                     f"→ {len(m['words'])} after cuts", quiet)
             except TranscribeUnavailable as e:
                 _log(f"  captions off: {e}", quiet)
                 for mm in moments:
@@ -178,9 +204,13 @@ def _verify_visually(vod_id: str, moments: list[dict], work: Path, cfg: Config,
     rejected = 0
 
     for m in moments:
-        mid = (m["start"] + m["end"]) / 2.0
-        a = max(m["start"], mid - vis.probe_seconds / 2)
-        b = min(m["end"], a + vis.probe_seconds)
+        # probe footage that will survive the cut, not the middle of the
+        # window: with multi-cut the midpoint is often the dead air we drop
+        segs = m.get("segments") or [[m["start"], m["end"]]]
+        longest = max(segs, key=lambda sg: sg[1] - sg[0])
+        mid = (longest[0] + longest[1]) / 2.0
+        a = max(longest[0], mid - vis.probe_seconds / 2)
+        b = min(longest[1], a + vis.probe_seconds)
         probe = work / "probes" / f"{int(m['start'])}.mp4"
         try:
             if not probe.exists():
@@ -256,12 +286,29 @@ def render_moments(moments_file: Path, cfg: Config, *,
         # key the cache on the timestamp, not the rank: ranks are reassigned
         # every time a VOD is re-analysed, so a rank-keyed file silently
         # renders last run's footage under this run's title
-        raw = work / "clips" / f"{int(m['start'])}_{int(round(m['duration']))}.mp4"
+        ws = m.get("window_start", m["start"])
+        we = m.get("window_end", m["end"])
+        segs = [(float(a), float(b)) for a, b in (m.get("segments") or [])]
+
+        # key the cache on the timestamp, not the rank: ranks are reassigned
+        # every time a VOD is re-analysed, so a rank-keyed file silently
+        # renders last run's footage under this run's title
+        raw = work / "clips" / f"{int(ws)}_{int(round(we - ws))}.mp4"
         if not raw.exists():
             _log("  downloading section…", quiet)
-            twitch.download_section(vod_id, m["start"], m["end"], raw, fmt=fmt)
-        info = media_info(raw)
-        duration = min(info["duration"] or m["duration"], m["duration"])
+            twitch.download_section(vod_id, ws, we, raw, fmt=fmt)
+
+        src = raw
+        if len(segs) > 1:
+            cut = work / "cuts" / f"{int(ws)}_{int(round(m['duration']))}_{len(segs)}.mp4"
+            if not cut.exists():
+                _log(f"  cutting {len(segs)} segments out of "
+                     f"{we - ws:.0f}s of source…", quiet)
+                build_cut(raw, cut, segs, ws)
+            src = cut
+
+        info = media_info(src)
+        duration = info["duration"] or m["duration"]
 
         ass = work / "subs" / f"{rank:02d}.ass"
         game = clips[(rank - 1) % len(clips)] if clips else None
@@ -270,7 +317,7 @@ def render_moments(moments_file: Path, cfg: Config, *,
                   with_gameplay=game is not None)
         dest = out_dir / f"{rank:02d}_{_slug(m.get('title') or 'clip')}.mp4"
         _log(f"  rendering → {dest.name}", quiet)
-        render_clip(raw, game, ass, dest, duration, cfg.render,
+        render_clip(src, game, ass, dest, duration, cfg.render,
                     seed=rank, quiet=True)
         results.append(dest)
         _log(f"  ✓ {dest.stat().st_size / 1e6:.1f} MB", quiet)

@@ -93,6 +93,17 @@ class RenderConfig:
 
 
 @dataclass
+class ClipConfig:
+    """Shape of each finished clip."""
+    multi_cut: bool = True         # cut the dead air out of a wider window
+    target_duration: float = 35.0  # aim for this much finished footage
+    window: float = 85.0           # how much source to consider per moment
+    min_segment: float = 3.5       # never cut a piece shorter than this
+    merge_gap: float = 1.2         # a lull shorter than this is not a cut
+    max_segments: int = 5
+
+
+@dataclass
 class VisualConfig:
     """Verify candidates on screen before clipping them."""
     enabled: bool = True
@@ -108,6 +119,7 @@ class Config:
     score: ScoreConfig = field(default_factory=ScoreConfig)
     render: RenderConfig = field(default_factory=RenderConfig)
     visual: VisualConfig = field(default_factory=VisualConfig)
+    clip: ClipConfig = field(default_factory=ClipConfig)
     whisper_model: str = "small"
     whisper_lang: str | None = None
 
@@ -121,7 +133,7 @@ class Config:
             raise FileNotFoundError(f"config not found: {p}")
         raw = json.loads(p.read_text())
         for section, obj in (("score", cfg.score), ("render", cfg.render),
-                             ("visual", cfg.visual)):
+                             ("visual", cfg.visual), ("clip", cfg.clip)):
             for k, v in (raw.get(section) or {}).items():
                 if not hasattr(obj, k):
                     raise ValueError(f"unknown {section} option: {k}")
@@ -134,7 +146,7 @@ class Config:
     def apply_overrides(self, pairs: list[str]) -> None:
         """Apply `--set score.count=12` style overrides."""
         known = {"score": self.score, "render": self.render,
-                 "visual": self.visual}
+                 "visual": self.visual, "clip": self.clip}
         for pair in pairs:
             if "=" not in pair:
                 raise ValueError(f"--set expects section.key=value, got {pair!r}")
@@ -164,7 +176,7 @@ class Config:
 
     def to_dict(self) -> dict:
         return {"score": asdict(self.score), "render": asdict(self.render),
-                "visual": asdict(self.visual),
+                "visual": asdict(self.visual), "clip": asdict(self.clip),
                 "whisper_model": self.whisper_model,
                 "whisper_lang": self.whisper_lang}
 
