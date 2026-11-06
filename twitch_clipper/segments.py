@@ -173,17 +173,22 @@ def build_cut(src: Path, dest: Path, segments: list[tuple[float, float]],
                     f"(exit {proc.returncode}):\n{(proc.stderr or '')[-600:]}")
             parts.append(part)
 
+        staged = dest.with_suffix(".partial.mp4")
         listing = tmp / "parts.txt"
         listing.write_text("".join(f"file '{p.name}'\n" for p in parts))
         cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error",
                "-f", "concat", "-safe", "0", "-i", str(listing),
-               "-c", "copy", "-movflags", "+faststart", str(dest)]
+               "-c", "copy", "-movflags", "+faststart", str(staged)]
         proc = subprocess.run(cmd, capture_output=quiet, text=True,
                               cwd=str(tmp))
-        if proc.returncode != 0 or not dest.exists():
+        if proc.returncode != 0 or not staged.exists():
+            staged.unlink(missing_ok=True)
             raise RuntimeError(
                 f"joining {len(parts)} segments failed "
                 f"(exit {proc.returncode}):\n{(proc.stderr or '')[-600:]}")
+        # publish only once it is complete: a process killed mid-write must
+        # not leave something a later run mistakes for a finished cache entry
+        staged.replace(dest)
     finally:
         for f in tmp.glob("*"):
             f.unlink(missing_ok=True)

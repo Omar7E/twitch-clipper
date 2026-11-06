@@ -44,6 +44,25 @@ def media_info(path: Path) -> dict:
     }
 
 
+def is_playable(path: Path) -> bool:
+    """True if the file is complete enough to decode.
+
+    A process killed mid-write (ffmpeg under the OOM killer, an interrupted
+    download) leaves a file that exists and has size but no moov atom. Any
+    cache check based on existence alone will happily reuse it.
+    """
+    if not path.exists() or path.stat().st_size == 0:
+        return False
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=nw=1:nk=1", str(path)],
+        capture_output=True, text=True)
+    try:
+        return out.returncode == 0 and float(out.stdout.strip()) > 0
+    except ValueError:
+        return False
+
+
 def find_gameplay(paths: list[Path]) -> list[Path]:
     """Expand files and directories into a list of usable gameplay clips."""
     exts = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"}

@@ -10,7 +10,7 @@ from . import audio as audio_mod
 from . import twitch
 from .chat import build_signal
 from .config import Config
-from .render import find_gameplay, media_info, render_clip
+from .render import find_gameplay, is_playable, media_info, render_clip
 from .score import blend, pick_moments
 from .subtitles import build_ass
 from .segments import build_cut, plan_segments, remap_words
@@ -294,14 +294,16 @@ def render_moments(moments_file: Path, cfg: Config, *,
         # every time a VOD is re-analysed, so a rank-keyed file silently
         # renders last run's footage under this run's title
         raw = work / "clips" / f"{int(ws)}_{int(round(we - ws))}.mp4"
-        if not raw.exists():
+        if not is_playable(raw):
+            raw.unlink(missing_ok=True)
             _log("  downloading section…", quiet)
             twitch.download_section(vod_id, ws, we, raw, fmt=fmt)
 
         src = raw
         if len(segs) > 1:
             cut = work / "cuts" / f"{int(ws)}_{int(round(m['duration']))}_{len(segs)}.mp4"
-            if not cut.exists():
+            if not is_playable(cut):
+                cut.unlink(missing_ok=True)
                 _log(f"  cutting {len(segs)} segments out of "
                      f"{we - ws:.0f}s of source…", quiet)
                 build_cut(raw, cut, segs, ws)
