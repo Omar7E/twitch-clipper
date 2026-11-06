@@ -137,26 +137,55 @@ def remap_words(words: list[dict], segments: list[tuple[float, float]],
 
 def build_cut(src: Path, dest: Path, segments: list[tuple[float, float]],
               window_start: float, *, quiet: bool = True) -> Path:
-    """Concatenate the kept segments of `src` into one file."""
+    """Concatenate the kept segments of `src` into one file.
+
+    Each segment is extracted on its own and the parts are joined with the
+    concat demuxer. The obvious one-pass alternative - a filter_complex of
+    parallel trim/atrim branches feeding concat - runs the machine out of
+    memory and gets the process killed: `trim` does not seek, so every
+    branch decodes the whole input, and concat needs the first branch's
+    frames while the later ones buffer theirs. On an 85s 1080p60 source with
+    five segments that is gigabytes of buffered video, and ffmpeg dies with
+    no message on stderr. Seeking per segment keeps it to one decode each.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
     if len(segments) <= 1:
         return src
 
-    parts, vlabels, alabels = [], [], []
-    for i, (s, e) in enumerate(segments):
-        rs, re_ = max(0.0, s - window_start), max(0.0, e - window_start)
-        parts.append(f"[0:v]trim=start={rs:.3f}:end={re_:.3f},setpts=PTS-STARTPTS[v{i}]")
-        parts.append(f"[0:a]atrim=start={rs:.3f}:end={re_:.3f},asetpts=PTS-STARTPTS[a{i}]")
-        vlabels.append(f"[v{i}]"); alabels.append(f"[a{i}]")
-    inter = "".join(v + a for v, a in zip(vlabels, alabels))
-    parts.append(f"{inter}concat=n={len(segments)}:v=1:a=1[vout][aout]")
+    tmp = dest.parent / f".{dest.stem}_parts"
+    tmp.mkdir(parents=True, exist_ok=True)
+    parts: list[Path] = []
+    try:
+        for i, (s_, e_) in enumerate(segments):
+            rs = max(0.0, s_ - window_start)
+            dur = max(0.05, e_ - s_)
+            part = tmp / f"{i:02d}.mp4"
+            cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error",
+                   "-ss", f"{rs:.3f}", "-i", str(src), "-t", f"{dur:.3f}",
+                   "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                   "-pix_fmt", "yuv420p",
+                   "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+                   "-avoid_negative_ts", "make_zero", str(part)]
+            proc = subprocess.run(cmd, capture_output=quiet, text=True)
+            if proc.returncode != 0 or not part.exists():
+                raise RuntimeError(
+                    f"segment {i} ({rs:.1f}s +{dur:.1f}s) failed "
+                    f"(exit {proc.returncode}):\n{(proc.stderr or '')[-600:]}")
+            parts.append(part)
 
-    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(src),
-           "-filter_complex", ";".join(parts),
-           "-map", "[vout]", "-map", "[aout]",
-           "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-           "-c:a", "aac", "-b:a", "192k", str(dest)]
-    proc = subprocess.run(cmd, capture_output=quiet, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"segment concat failed:\n{(proc.stderr or '')[-800:]}")
+        listing = tmp / "parts.txt"
+        listing.write_text("".join(f"file '{p.name}'\n" for p in parts))
+        cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error",
+               "-f", "concat", "-safe", "0", "-i", str(listing),
+               "-c", "copy", "-movflags", "+faststart", str(dest)]
+        proc = subprocess.run(cmd, capture_output=quiet, text=True,
+                              cwd=str(tmp))
+        if proc.returncode != 0 or not dest.exists():
+            raise RuntimeError(
+                f"joining {len(parts)} segments failed "
+                f"(exit {proc.returncode}):\n{(proc.stderr or '')[-600:]}")
+    finally:
+        for f in tmp.glob("*"):
+            f.unlink(missing_ok=True)
+        tmp.rmdir()
     return dest
