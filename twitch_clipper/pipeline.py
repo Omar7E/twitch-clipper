@@ -253,7 +253,10 @@ def render_moments(moments_file: Path, cfg: Config, *,
         _log(f"\n── clip {rank}/{len(data['moments'])} "
              f"@ {m['start']:.0f}s ({m['duration']:.0f}s) "
              f"score {m['score']:.2f}", quiet)
-        raw = work / "clips" / f"{rank:02d}.mp4"
+        # key the cache on the timestamp, not the rank: ranks are reassigned
+        # every time a VOD is re-analysed, so a rank-keyed file silently
+        # renders last run's footage under this run's title
+        raw = work / "clips" / f"{int(m['start'])}_{int(round(m['duration']))}.mp4"
         if not raw.exists():
             _log("  downloading section…", quiet)
             twitch.download_section(vod_id, m["start"], m["end"], raw, fmt=fmt)
