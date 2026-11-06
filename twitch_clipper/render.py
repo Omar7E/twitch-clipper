@@ -59,9 +59,9 @@ def find_gameplay(paths: list[Path]) -> list[Path]:
 
 def build_filtergraph(cfg: RenderConfig, ass_file: Path, *,
                       with_gameplay: bool) -> str:
-    geo = geometry(cfg)
+    geo = geometry(cfg, with_gameplay)
     W = geo.width
-    clip_h = geo.clip_height if with_gameplay else geo.height
+    clip_h = geo.clip_height
     chain: list[str] = []
 
     pre = "[0:v]"

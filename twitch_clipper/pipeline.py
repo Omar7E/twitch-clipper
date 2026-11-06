@@ -187,10 +187,10 @@ def render_moments(moments_file: Path, cfg: Config, *,
         duration = min(info["duration"] or m["duration"], m["duration"])
 
         ass = work / "subs" / f"{rank:02d}.ass"
-        build_ass(ass, words=m.get("words") or [], title=m.get("title", ""),
-                  duration=duration, cfg=cfg.render)
-
         game = clips[(rank - 1) % len(clips)] if clips else None
+        build_ass(ass, words=m.get("words") or [], title=m.get("title", ""),
+                  duration=duration, cfg=cfg.render,
+                  with_gameplay=game is not None)
         dest = out_dir / f"{rank:02d}_{_slug(m.get('title') or 'clip')}.mp4"
         _log(f"  rendering → {dest.name}", quiet)
         render_clip(raw, game, ass, dest, duration, cfg.render,
