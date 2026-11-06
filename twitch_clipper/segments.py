@@ -149,8 +149,25 @@ def build_cut(src: Path, dest: Path, segments: list[tuple[float, float]],
     no message on stderr. Seeking per segment keeps it to one decode each.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if len(segments) <= 1:
+    if not segments:
         return src
+    if len(segments) == 1:
+        # Only pass the source straight through when that one segment IS the
+        # whole window. A single segment covering part of it still has to be
+        # trimmed, or the clip renders the full untrimmed window - which is
+        # how a 27s moment shipped as 85s.
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", str(src)],
+            capture_output=True, text=True)
+        try:
+            src_dur = float(probe.stdout.strip())
+        except ValueError:
+            src_dur = 0.0
+        s_, e_ = segments[0]
+        rel_s, rel_e = s_ - window_start, e_ - window_start
+        if src_dur <= 0 or (rel_s <= 0.3 and rel_e >= src_dur - 0.3):
+            return src
 
     tmp = dest.parent / f".{dest.stem}_parts"
     tmp.mkdir(parents=True, exist_ok=True)
