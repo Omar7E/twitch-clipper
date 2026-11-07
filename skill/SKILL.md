@@ -283,3 +283,44 @@ and write the result back into `moments.json`.
 
 Expect to pin moments on most VODs. The signals find reactions; you find
 meaning.
+
+## Verify the render, not the log
+
+The pipeline reports success while producing the wrong thing. Every serious
+fault found so far was silent: a clip cache keyed on rank served the
+previous run's footage under a new title; a threshold picked by quantile
+matched every frame so "multi-cut" returned whole windows untouched; an
+ffmpeg killed by the OOM killer left a file that existed, had size, and was
+accepted as a finished cache entry; a single-segment plan skipped trimming
+and shipped an 85-second clip planned as 27. None of these printed an
+error. Watching the log tells you nothing.
+
+After rendering, check each output against what it claimed to be:
+
+- **Duration** against the planned `duration` in moments.json. A large
+  overshoot means trimming did not happen.
+- **Motion and still fraction** (decode small and greyscale, take the mean
+  absolute frame difference). Real gameplay runs well above a static
+  screen; a high still fraction on a clip that is not a deliberate results
+  screen means the wrong footage.
+- **Caption end time** against clip duration. Captions running past the end
+  mean the remap onto the cut timeline is wrong.
+- **One frame, looked at**, for at least the headline clip.
+
+When an ffmpeg wrapper reports a failure with empty stderr, suspect a
+signal rather than a filter error, and re-run the command outside the
+output capture to see the real exit code. Exit 137 is the OOM killer.
+
+## Two Twitch facts that shape what is possible
+
+**Highlight VODs carry almost no chat replay.** Chat is attached to the
+original broadcast, so a VOD titled "Highlight: ..." will come back with a
+fraction of the messages and the chat signal will be useless. Check whether
+the VOD is a highlight before concluding the stream was quiet.
+
+**Many channels only publish a source rendition.** `yt-dlp -F` on one VOD
+offered just audio and a 5.66 GB 1080p60 source — no 480p, no 360p. Whole-
+video analysis is then impossible on a slow connection, which is why
+candidates are probed individually and the storyboard is the only cheap
+whole-stream view. Check the format list before planning any approach that
+needs the video end to end.
