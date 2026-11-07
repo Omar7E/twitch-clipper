@@ -162,7 +162,7 @@ The title card is a headline, and its job is to stop a scroller who has never he
 - **Use second person or a generic subject when it helps:** "this guy", "he", "my teammate", "you", or a role like "a boss". Talk to the viewer rather than about an unknown person.
 - **Keep it short and readable in about 2 seconds on a phone,** ideally 4 to 9 words, in caps.
 - **Be honest.** The clip must deliver what the title promises. Clickbait that disappoints kills retention and gets the clip buried.
-- **Describe the event, do not quote the streamer.** Pull the facts from `clipper show --full`, and trust chat's reading of the event when the streamer's words are vague.
+- **Describe the event, or quote the line that *is* the joke.** Default to describing what happened; pull the facts from `clipper show --full`, and trust chat's reading of the event when the streamer's words are vague. The exception, which the reference clips lean on heavily: when one spoken line is itself the content — a corny line, an absurd demand, the thing that triggered the meltdown — put it in quotation marks with an emoji and let it be the headline. Quote other people (a chatter, a friend, a kid on voice chat) rather than the streamer narrating his own gameplay.
 
 **Headline patterns that work**
 - Stakes plus twist: "1 HP AGAINST 4 PLAYERS AND HE STILL WON"
@@ -476,6 +476,62 @@ about fifteen minutes.
 
 Use 480p for anything you only intend to look at. Judging candidates,
 contact sheets and probe sweeps never need the full-quality rendition.
+
+## What the reference clips actually do
+
+Seven clips the user picked out as good, measured rather than guessed
+(views 213k to 11.8M). These are the house style to aim at.
+
+| # | kind | len | internal cuts | headline |
+|---|---|---|---|---|
+| 1 | rage bait | 28s | 9 (compilation) | `"yo why'd our whole team die" 😂` |
+| 2 | 3rd-person commentary | 17s | 0 | `Joe bart playing horror games is actually my favorite thing` |
+| 3 | cool attempt, epic fail | 61s | 6 (compilation) | `Joe tries a barrel roll` |
+| 4 | quoting a corny line | 26s | 0 | `"boi shut freak up"😂` |
+| 5 | impressive gameplay | 10s | 11 (replay angles) | `Crazy pinch` |
+| 6 | frustration + its trigger | 24s | 0 | `"bro is sitting" 😭❤️‍🔥` |
+| 7 | POV meme | 65s | 0 | `Pov: me and bro arguing over the dumbest shit ever` |
+
+**A single moment runs contiguous.** Every one-moment clip here has zero
+internal cuts: 4, 6, 7 and 2 never cut once. Cuts appear only in
+compilations stitching separate moments (1, 3) and in a replay shown from
+several angles (5). This matters because the tool defaults to 4-5 jump
+cuts inside every clip. Multi-cut is for compressing a long window into a
+story, not for tightening a moment that already works — if the moment is
+one continuous beat, set `clip.multi_cut=false` and let it run.
+
+**Quoting is a real pattern, not a mistake.** Three of seven headlines are
+a literal quote in quotation marks plus an emoji. The rule is not "never
+quote" — it is *quote when the line itself is the joke*, and prefer
+quoting someone other than the streamer: a chatter, a friend, a kid on
+voice chat, the thing that triggered the reaction. Do not quote the
+streamer narrating his own gameplay; that is what fails.
+
+**Headline sits at the seam**, at 23-37% of frame height for the
+facecam-over-gameplay layouts, not high up and not centred. It is small,
+one or two lines, often in a white rounded box, and it holds for the whole
+video.
+
+**Sentence case, not caps.** None of these shout in all caps. `Joe tries a
+barrel roll`, `Crazy pinch`, `Pov: me and bro arguing...`. Short and flat
+beats loud.
+
+**Length follows the kind.** Single moment 10-28s; compilation 60s+. The
+10-second Rocket League clip got 870k views on one touch.
+
+**A face carries these clips.** Six of seven show a reaction face, usually
+a facecam strip above the gameplay. tpcfp's VODs have no facecam, so that
+whole lever is unavailable and the gameplay has to be legible on its own —
+which is an argument for picking moments where the screen reads clearly at
+thumbnail size, and against clips where tiny characters move on flat
+walls.
+
+**Their hashtags** run 3-6 per post and always include the creator's name
+(`#joebart #joebartolozzi #joebartgames`, `#marlon`, `#ishowspeed`)
+alongside generic reach tags (`#fyp #viral #gaming #funny`). The user's
+standing instruction is the same two tags every time, so keep that unless
+they say otherwise, but the reference set suggests name tags are doing
+work.
 
 ## Post captions
 
