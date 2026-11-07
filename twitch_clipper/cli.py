@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from .config import Config
-from .pipeline import REPO, analyse, render_moments, work_dir_for
+from .pipeline import REPO, _slug, analyse, render_moments, work_dir_for
 from .render import RenderError, find_gameplay, normalise_gameplay
 from .transcribe import TranscribeUnavailable
 from .twitch import TwitchError, parse_vod_id
@@ -171,6 +171,15 @@ def build_parser() -> argparse.ArgumentParser:
     ad.add_argument("--config", default=None)
     ad.add_argument("-q", "--quiet", action="store_true")
 
+    ap = sub.add_parser("approve",
+                        help="mark clips approved and collect them for posting")
+    ap.add_argument("which", help="clip numbers (1,3 or 1-4) or 'all'")
+    ap.add_argument("--to", type=Path, default=None,
+                    help="where to put them (default: ./approved/<vod-id>)")
+    ap.add_argument("--vod", help="VOD url or id (default: most recent analysis)")
+    ap.add_argument("--moments", help="path to a moments.json")
+    ap.add_argument("--work", type=Path, default=None)
+
     r = sub.add_parser("render", help="cut and render the selected moments")
     r.add_argument("--vod", help="VOD url or id (default: most recent analysis)")
     r.add_argument("--moments", help="path to a moments.json")
@@ -236,6 +245,52 @@ def main(argv: list[str] | None = None) -> int:
             normalise_gameplay(src, dest)
             print(f"  ✓ {dest.stat().st_size / 1e6:.1f} MB  1080x1920")
         print(f"\nready in {out}")
+        return 0
+
+    if args.cmd == "approve":
+        import shutil
+        path = _resolve_moments(args)
+        data = json.loads(path.read_text())
+        vod = data["vod"]
+        vod_id = vod["id"]
+        rendered = REPO / "out" / vod_id
+        wanted = (None if args.which.strip().lower() == "all"
+                  else set(_parse_only(args.which) or []))
+        dest = args.to or (REPO / "approved" / vod_id)
+        dest.mkdir(parents=True, exist_ok=True)
+
+        picked, missing = [], []
+        for m in data["moments"]:
+            if wanted is not None and m["rank"] not in wanted:
+                continue
+            hits = sorted(rendered.glob(f"{m['rank']:02d}_*.mp4"))
+            if not hits:
+                if wanted is not None:
+                    missing.append(m["rank"])
+                continue
+            m["approved"] = True
+            picked.append((m, hits[0]))
+
+        if missing:
+            print(f"not rendered yet, skipped: {sorted(missing)}")
+        if not picked:
+            raise SystemExit("nothing to approve - render the clips first")
+
+        lines = [f"{vod['channel']} - {vod['title']}", vod.get("url", ""), ""]
+        for i, (m, src) in enumerate(picked, 1):
+            mm, ss = divmod(int(m.get("peak", m["start"])), 60)
+            hh, mm = divmod(mm, 60)
+            stamp = f"{hh}-{mm:02d}-{ss:02d}" if hh else f"{mm:02d}-{ss:02d}"
+            out = dest / f"{i:02d}_{stamp}_{_slug(m.get('title') or 'clip')}.mp4"
+            shutil.copy2(src, out)
+            lines.append(f"{i:>2}. [{stamp.replace('-', ':')}] "
+                         f"{m.get('title', '')} {m.get('emoji', '')}".rstrip())
+            lines.append(f"    {out.name}  ({m['duration']:.0f}s)")
+        (dest / "clips.txt").write_text("\n".join(lines) + "\n")
+        path.write_text(json.dumps(data, indent=2))
+        print(f"approved {len(picked)} clip(s) -> {dest}")
+        for ln in lines[3:]:
+            print("  " + ln)
         return 0
 
     if args.cmd == "add":

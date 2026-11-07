@@ -96,6 +96,9 @@ class RenderConfig:
     gameplay_volume: float = 0.0      # 0 = muted gameplay
     loudnorm: bool = True
 
+    censor: bool = True        # mask strong language in burnt-in text
+    censor_mild: bool = False  # also mask damn / crap / hell
+
     crf: int = 19
     preset: str = "veryfast"
 
