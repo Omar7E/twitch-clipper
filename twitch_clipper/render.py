@@ -44,6 +44,40 @@ def media_info(path: Path) -> dict:
     }
 
 
+def _title_font_file(cfg: RenderConfig) -> Path | None:
+    """Locate the headline font on disk so its text can be measured."""
+    if cfg.title_font_file:
+        cand = FONT_DIR / cfg.title_font_file
+        if cand.exists():
+            return cand
+    query = f"{cfg.title_font}:bold" if cfg.title_bold else cfg.title_font
+    out = subprocess.run(["fc-match", "-f", "%{file}", query],
+                         capture_output=True, text=True)
+    path = Path(out.stdout.strip()) if out.returncode == 0 else None
+    return path if path and path.exists() else None
+
+
+def measure_line(text: str, cfg: RenderConfig) -> tuple[float, float]:
+    """(width, line height) of one rendered headline line, in pixels.
+
+    Used to drop emoji artwork in line with the end of the text rather than
+    centred underneath it. Falls back to a rough estimate if the font cannot
+    be measured, which only shifts the emoji slightly.
+    """
+    fallback = (len(text) * cfg.title_size * 0.55, cfg.title_size * 1.2)
+    path = _title_font_file(cfg)
+    if path is None:
+        return fallback
+    try:
+        from PIL import ImageFont
+        font = ImageFont.truetype(str(path), cfg.title_size)
+        width = float(font.getlength(text))
+        asc, desc = font.getmetrics()
+        return width, float(asc + desc)
+    except Exception:
+        return fallback
+
+
 def is_playable(path: Path) -> bool:
     """True if the file is complete enough to decode.
 
@@ -65,13 +99,17 @@ def is_playable(path: Path) -> bool:
 
 # libass renders COLR/CBDT emoji fonts as flat monochrome glyphs, and the
 # opaque-box border goes ragged around them, so emoji are composited as
-# images instead. Twemoji artwork is CC-BY 4.0.
-EMOJI_CDN = "https://cdn.jsdelivr.net/gh/twitter/twemoji@v14.0.2/assets/72x72"
+# images instead. Noto Emoji artwork (Apache 2.0) is the closest openly
+# licensed match to the set these clips are styled after; Apple's own set
+# is proprietary and cannot be redistributed.
+EMOJI_CDN = ("https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@v2.047"
+             "/png/128")
 
 
 def emoji_codepoint(ch: str) -> str:
-    """Twemoji filename stem for one emoji character."""
-    return "-".join(f"{ord(c):x}" for c in ch if ord(c) != 0xFE0F)
+    """Noto filename stem for one emoji character, e.g. emoji_u1f62d."""
+    pts = "_".join(f"{ord(c):x}" for c in ch if ord(c) != 0xFE0F)
+    return f"emoji_u{pts}" if pts else ""
 
 
 def fetch_emoji(chars: str, cache: Path) -> list[Path]:
@@ -195,25 +233,30 @@ def render_clip(clip: Path, gameplay: Path | None, ass_file: Path, dest: Path,
                               out_label=base)
 
     if art:
-        # sit the artwork just under the headline box
+        # sit the artwork in line with the end of the last headline line,
+        # the way short-form captions do, rather than centred underneath
         import textwrap as _tw
         geo = geometry(cfg, with_gameplay)
-        n_lines = len(_tw.wrap(title.strip(), width=cfg.title_wrap) or [""])
+        lines = _tw.wrap(title.strip(), width=cfg.title_wrap) or [""]
         title_y = max(int(round(geo.height * cfg.title_y_frac)),
                       int(cfg.title_size * 0.9) + 24)
-        size = int(cfg.title_size * 1.15)
-        gap = int(size * 0.18)
+        last_w, line_h = measure_line(lines[-1], cfg)
+        block_h = line_h * len(lines)
+        # centre of the last line within the \an5-anchored block
+        last_cy = title_y - block_h / 2 + line_h * (len(lines) - 0.5)
+        size = int(cfg.title_size * 0.92)
+        gap = int(size * 0.16)
+        x = geo.width / 2 + last_w / 2 + cfg.title_outline + gap
         total = len(art) * size + (len(art) - 1) * gap
-        x0 = (geo.width - total) // 2
-        y0 = title_y + int(n_lines * cfg.title_size * 1.30 / 2) + 26
-        first_emoji_input = 2 if with_gameplay else 1
+        # keep the run of emoji on screen
+        x = min(x, geo.width - total - 16)
+        y = int(last_cy - size / 2)
         label = base
         for i, _png in enumerate(art):
-            graph += (f";[{first_emoji_input + i}:v]"
-                      f"scale={size}:{size}[e{i}]")
+            graph += f";[{(2 if with_gameplay else 1) + i}:v]scale={size}:{size}[e{i}]"
             nxt = "vout" if i == len(art) - 1 else f"ov{i}"
             graph += (f";[{label}][e{i}]overlay="
-                      f"{x0 + i * (size + gap)}:{y0}[{nxt}]")
+                      f"{int(x) + i * (size + gap)}:{y}[{nxt}]")
             label = nxt
 
     # audio: stream audio always, gameplay mixed in only if asked for

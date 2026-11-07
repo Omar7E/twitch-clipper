@@ -98,8 +98,10 @@ def _styles(cfg: RenderConfig) -> list[str]:
         f"{black},{ass_color('#000000', 0.45)},0,0,0,0,100,100,1.5,0,"
         f"{cap_border},{cap_outline},0,5,40,40,0,1",
         # title card
+        # white with a heavy black stroke and no background box
         f"Style: Title,{cfg.title_font},{cfg.title_size},{white},{white},"
-        f"{title_bg},{title_bg},0,0,0,0,100,100,1,0,3,14,0,8,50,50,0,1",
+        f"{black},{black},{1 if cfg.title_bold else 0},0,0,0,100,100,0,0,"
+        f"1,{cfg.title_outline},0,5,50,50,0,1",
         # follow banner
         f"Style: Follow,{cfg.font},{cfg.follow_size},{white},{white},"
         f"{follow_bg},{follow_bg},0,0,0,0,100,100,2,0,3,14,0,5,40,40,0,1",
