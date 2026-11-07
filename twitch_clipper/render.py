@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from .config import FONT_DIR, RenderConfig
+from .textfit import measure, wrap_to_width
 from .subtitles import geometry
 
 
@@ -237,10 +238,15 @@ def render_clip(clip: Path, gameplay: Path | None, ass_file: Path, dest: Path,
         # the way short-form captions do, rather than centred underneath
         import textwrap as _tw
         geo = geometry(cfg, with_gameplay)
-        lines = _tw.wrap(title.strip(), width=cfg.title_wrap) or [""]
+        lines = wrap_to_width(
+            title.strip(), cfg.title_font, cfg.title_size,
+            geo.width - 2 * cfg.safe_x - 2 * cfg.title_outline,
+            bold=cfg.title_bold, file_name=cfg.title_font_file) or [""]
         title_y = max(int(round(geo.height * cfg.title_y_frac)),
                       int(cfg.title_size * 0.9) + 24)
-        last_w, line_h = measure_line(lines[-1], cfg)
+        last_w, line_h = measure(lines[-1], cfg.title_font, cfg.title_size,
+                                 bold=cfg.title_bold,
+                                 file_name=cfg.title_font_file)
         block_h = line_h * len(lines)
         # centre of the last line within the \an5-anchored block
         last_cy = title_y - block_h / 2 + line_h * (len(lines) - 0.5)
@@ -249,7 +255,7 @@ def render_clip(clip: Path, gameplay: Path | None, ass_file: Path, dest: Path,
         x = geo.width / 2 + last_w / 2 + cfg.title_outline + gap
         total = len(art) * size + (len(art) - 1) * gap
         # keep the run of emoji on screen
-        x = min(x, geo.width - total - 16)
+        x = min(x, geo.width - cfg.safe_x - total)
         y = int(last_cy - size / 2)
         label = base
         for i, _png in enumerate(art):

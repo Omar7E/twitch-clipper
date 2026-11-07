@@ -83,6 +83,12 @@ class RenderConfig:
     title_bold: bool = True
     title_outline: int = 7      # heavy stroke, no background box
     title_y_frac: float = 0.20   # headline centre, as a fraction of height
+    # Short-form safe area. Platform UI covers the edges: the top bar, the
+    # action buttons down the right, and the caption block along the bottom.
+    # Nothing drawn may cross these.
+    safe_x: int = 72
+    safe_top: int = 180
+    safe_bottom: int = 340
     title_hold: bool = True      # keep it up for the whole clip
 
     follow_text: str = "FOLLOW TPCFP ON TWITCH"

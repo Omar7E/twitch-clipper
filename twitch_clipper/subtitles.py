@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .censor import censor, censor_words
 from .config import RenderConfig
+from .textfit import measure, wrap_to_width
 from .transcribe import group_lines
 
 
@@ -130,6 +131,8 @@ def _caption_events(words: list[dict], cfg: RenderConfig, geo: Geometry,
             hi = min(hi, geo.clip_bottom - badge)
         else:
             lo = max(lo, geo.clip_top + badge)
+    # never cross the bottom safe edge where the platform caption sits
+    hi = min(hi, geo.height - cfg.safe_bottom - cfg.caption_size // 2)
     y = int(max(lo, min(hi, y))) if hi > lo else int((lo + hi) // 2)
     pos = f"\\an5\\pos({geo.width // 2},{y})"
 
@@ -174,11 +177,18 @@ def _title_events(title: str, cfg: RenderConfig, geo: Geometry,
                   duration: float) -> list[str]:
     if not title.strip():
         return []
-    lines = textwrap.wrap(title.strip(), width=cfg.title_wrap) or [title.strip()]
+    # wrap to the real rendered width, not a character count: a 24-char
+    # line in this face at 80px measures 1176px and runs off a 1080 frame
+    budget = geo.width - 2 * cfg.safe_x - 2 * cfg.title_outline
+    lines = wrap_to_width(title.strip(), cfg.title_font, cfg.title_size,
+                          budget, bold=cfg.title_bold,
+                          file_name=cfg.title_font_file) or [title.strip()]
     wrapped = "\\N".join(esc(ln) for ln in lines)
+    _, line_h = measure(lines[0], cfg.title_font, cfg.title_size,
+                        bold=cfg.title_bold, file_name=cfg.title_font_file)
     y = int(round(geo.height * cfg.title_y_frac))
-    # keep it clear of the top edge whatever the fraction says
-    y = max(y, int(cfg.title_size * 0.9) + 24)
+    # the whole block must clear the top safe edge
+    y = max(y, int(cfg.safe_top + line_h * len(lines) / 2))
     hold = duration if cfg.title_hold else min(duration, max(3.0, duration * 0.45))
     # no fade out: the headline stays up for the whole clip
     return [
@@ -205,7 +215,8 @@ def _follow_events(cfg: RenderConfig, geo: Geometry, duration: float) -> list[st
             y = int(round(geo.height * 0.72))
         else:
             y = geo.clip_bottom if cfg.layout == "gameplay-bottom" else geo.clip_top
-        y = max(cfg.follow_size, min(geo.height - cfg.follow_size, y))
+        y = max(cfg.safe_top + cfg.follow_size,
+                min(geo.height - cfg.safe_bottom - cfg.follow_size, y))
     else:
         raise ValueError(f"unknown follow_position {cfg.follow_position!r} "
                          "(expected seam, top or bottom)")

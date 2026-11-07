@@ -286,6 +286,15 @@ def main(argv: list[str] | None = None) -> int:
             lines.append(f"{i:>2}. [{stamp.replace('-', ':')}] "
                          f"{m.get('title', '')} {m.get('emoji', '')}".rstrip())
             lines.append(f"    {out.name}  ({m['duration']:.0f}s)")
+            # the caption to paste when posting
+            caption = m.get("caption") or ""
+            if not caption:
+                caption = f"{m.get('title', '').capitalize()}\n\nTwitch: Tpcfp"
+            lines.append("    ---")
+            for cl in caption.splitlines():
+                lines.append(f"    {cl}" if cl else "")
+            lines.append("    ---")
+            lines.append("")
         (dest / "clips.txt").write_text("\n".join(lines) + "\n")
         path.write_text(json.dumps(data, indent=2))
         print(f"approved {len(picked)} clip(s) -> {dest}")
