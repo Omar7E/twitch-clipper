@@ -324,3 +324,22 @@ video analysis is then impossible on a slow connection, which is why
 candidates are probed individually and the storyboard is the only cheap
 whole-stream view. Check the format list before planning any approach that
 needs the video end to end.
+
+## Language on screen
+
+Captions are burnt in, so swearing is permanent and costs reach on every
+platform that reads frames. The renderer masks strong language by default,
+keeping the first letter and hashing the rest ("Fuck!" -> "F###!"), at
+render time only - the transcript keeps the real words. damn, crap and hell
+are treated as mild and left alone unless `--set render.censor_mild=true`.
+
+Check the rendered captions of any clip where the reaction is the payoff:
+that is exactly where the swearing is, and the masking is only as good as
+its word list. Add terms to `censor.py` rather than editing transcripts.
+
+## Finishing: approve and collect
+
+`clipper approve <ids|all>` marks the chosen clips approved and copies them
+into `approved/<vod-id>` named by timestamp and title, with a clips.txt
+listing each one. Deliver that folder rather than the raw render directory,
+which holds rejected and superseded takes.
