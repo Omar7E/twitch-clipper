@@ -82,7 +82,7 @@ class RenderConfig:
     title_font_file: str = ""  # installed system-wide
     title_bold: bool = True
     title_outline: int = 7      # heavy stroke, no background box
-    title_y_frac: float = 0.20   # headline centre, as a fraction of height
+    title_y_frac: float = 0.29   # headline centre: just above the clip band, like the reference clips
     # Short-form safe area. Platform UI covers the edges: the top bar, the
     # action buttons down the right, and the caption block along the bottom.
     # Nothing drawn may cross these.
