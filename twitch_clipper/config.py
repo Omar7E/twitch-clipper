@@ -138,7 +138,7 @@ class Config:
     visual: VisualConfig = field(default_factory=VisualConfig)
     clip: ClipConfig = field(default_factory=ClipConfig)
     whisper_model: str = "small"
-    whisper_lang: str | None = None
+    whisper_lang: str | None = "en"   # auto-detect misfired on clear English audio and produced Arabic captions
 
     @classmethod
     def load(cls, path: str | Path | None) -> "Config":
