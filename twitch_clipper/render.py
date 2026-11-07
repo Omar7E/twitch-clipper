@@ -63,6 +63,44 @@ def is_playable(path: Path) -> bool:
         return False
 
 
+# libass renders COLR/CBDT emoji fonts as flat monochrome glyphs, and the
+# opaque-box border goes ragged around them, so emoji are composited as
+# images instead. Twemoji artwork is CC-BY 4.0.
+EMOJI_CDN = "https://cdn.jsdelivr.net/gh/twitter/twemoji@v14.0.2/assets/72x72"
+
+
+def emoji_codepoint(ch: str) -> str:
+    """Twemoji filename stem for one emoji character."""
+    return "-".join(f"{ord(c):x}" for c in ch if ord(c) != 0xFE0F)
+
+
+def fetch_emoji(chars: str, cache: Path) -> list[Path]:
+    """Artwork for each emoji in `chars`, downloaded once and cached."""
+    import urllib.error
+    import urllib.request
+    cache.mkdir(parents=True, exist_ok=True)
+    out: list[Path] = []
+    for ch in chars:
+        if ch.isspace() or ord(ch) == 0xFE0F:
+            continue
+        stem = emoji_codepoint(ch)
+        if not stem:
+            continue
+        dest = cache / f"{stem}.png"
+        if not dest.exists() or dest.stat().st_size == 0:
+            try:
+                with urllib.request.urlopen(f"{EMOJI_CDN}/{stem}.png",
+                                            timeout=30) as r:
+                    data = r.read()
+            except (urllib.error.URLError, TimeoutError, OSError):
+                continue
+            if not data.startswith(b"\x89PNG"):
+                continue
+            dest.write_bytes(data)
+        out.append(dest)
+    return out
+
+
 def find_gameplay(paths: list[Path]) -> list[Path]:
     """Expand files and directories into a list of usable gameplay clips."""
     exts = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi"}
@@ -77,7 +115,7 @@ def find_gameplay(paths: list[Path]) -> list[Path]:
 
 
 def build_filtergraph(cfg: RenderConfig, ass_file: Path, *,
-                      with_gameplay: bool) -> str:
+                      with_gameplay: bool, out_label: str = "vout") -> str:
     geo = geometry(cfg, with_gameplay)
     W = geo.width
     clip_h = geo.clip_height
@@ -115,13 +153,16 @@ def build_filtergraph(cfg: RenderConfig, ass_file: Path, *,
         src = "[clipreg]"
 
     fonts = shlex.quote(str(FONT_DIR)).strip("'")
-    chain.append(f"{src}ass=filename={ass_file.as_posix()}:fontsdir={fonts}[vout]")
+    chain.append(f"{src}ass=filename={ass_file.as_posix()}:fontsdir={fonts}"
+                 f"[{out_label}]")
     return ";".join(chain)
 
 
 def render_clip(clip: Path, gameplay: Path | None, ass_file: Path, dest: Path,
                 duration: float, cfg: RenderConfig, *,
-                seed: int | None = None, quiet: bool = True) -> Path:
+                seed: int | None = None, quiet: bool = True,
+                title: str = "", emoji: str = "",
+                emoji_cache: Path | None = None) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     clip_info = media_info(clip)
     if not clip_info["has_video"]:
@@ -145,7 +186,35 @@ def render_clip(clip: Path, gameplay: Path | None, ass_file: Path, dest: Path,
             cmd += ["-ss", f"{start:.2f}"]
         cmd += ["-stream_loop", "-1", "-i", str(gameplay)]
 
-    graph = build_filtergraph(cfg, ass_file, with_gameplay=with_gameplay)
+    art = fetch_emoji(emoji, emoji_cache) if (emoji and emoji_cache) else []
+    for png in art:
+        cmd += ["-i", str(png)]
+
+    base = "vbase" if art else "vout"
+    graph = build_filtergraph(cfg, ass_file, with_gameplay=with_gameplay,
+                              out_label=base)
+
+    if art:
+        # sit the artwork just under the headline box
+        import textwrap as _tw
+        geo = geometry(cfg, with_gameplay)
+        n_lines = len(_tw.wrap(title.strip(), width=cfg.title_wrap) or [""])
+        title_y = max(int(round(geo.height * cfg.title_y_frac)),
+                      int(cfg.title_size * 0.9) + 24)
+        size = int(cfg.title_size * 1.15)
+        gap = int(size * 0.18)
+        total = len(art) * size + (len(art) - 1) * gap
+        x0 = (geo.width - total) // 2
+        y0 = title_y + int(n_lines * cfg.title_size * 1.30 / 2) + 26
+        first_emoji_input = 2 if with_gameplay else 1
+        label = base
+        for i, _png in enumerate(art):
+            graph += (f";[{first_emoji_input + i}:v]"
+                      f"scale={size}:{size}[e{i}]")
+            nxt = "vout" if i == len(art) - 1 else f"ov{i}"
+            graph += (f";[{label}][e{i}]overlay="
+                      f"{x0 + i * (size + gap)}:{y0}[{nxt}]")
+            label = nxt
 
     # audio: stream audio always, gameplay mixed in only if asked for
     gv = max(0.0, cfg.gameplay_volume)

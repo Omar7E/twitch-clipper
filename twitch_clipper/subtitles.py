@@ -98,7 +98,7 @@ def _styles(cfg: RenderConfig) -> list[str]:
         f"{black},{ass_color('#000000', 0.45)},0,0,0,0,100,100,1.5,0,"
         f"{cap_border},{cap_outline},0,5,40,40,0,1",
         # title card
-        f"Style: Title,{cfg.font},{cfg.title_size},{white},{white},"
+        f"Style: Title,{cfg.title_font},{cfg.title_size},{white},{white},"
         f"{title_bg},{title_bg},0,0,0,0,100,100,1,0,3,14,0,8,50,50,0,1",
         # follow banner
         f"Style: Follow,{cfg.font},{cfg.follow_size},{white},{white},"
@@ -171,15 +171,16 @@ def _title_events(title: str, cfg: RenderConfig, geo: Geometry,
                   duration: float) -> list[str]:
     if not title.strip():
         return []
-    # escape each line *before* joining: esc() would turn the \N break tag
-    # into a literal backslash on screen
     lines = textwrap.wrap(title.strip(), width=cfg.title_wrap) or [title.strip()]
     wrapped = "\\N".join(esc(ln) for ln in lines)
-    y = geo.clip_top + int(round(cfg.title_size * 0.55)) + 22
-    hold = min(duration, max(3.0, duration * 0.45))
+    y = int(round(geo.height * cfg.title_y_frac))
+    # keep it clear of the top edge whatever the fraction says
+    y = max(y, int(cfg.title_size * 0.9) + 24)
+    hold = duration if cfg.title_hold else min(duration, max(3.0, duration * 0.45))
+    # no fade out: the headline stays up for the whole clip
     return [
         f"Dialogue: 1,{ts(0.0)},{ts(hold)},Title,,0,0,0,,"
-        f"{{\\an8\\pos({geo.width // 2},{y})\\fad(140,220)}}{wrapped}"
+        f"{{\\an5\\pos({geo.width // 2},{y})}}{wrapped}"
     ]
 
 

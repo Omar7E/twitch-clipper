@@ -328,7 +328,9 @@ def render_moments(moments_file: Path, cfg: Config, *,
         dest = out_dir / f"{rank:02d}_{_slug(m.get('title') or 'clip')}.mp4"
         _log(f"  rendering → {dest.name}", quiet)
         render_clip(src, game, ass, dest, duration, cfg.render,
-                    seed=rank, quiet=True)
+                    seed=rank, quiet=True,
+                    title=m.get("title", ""), emoji=m.get("emoji", ""),
+                    emoji_cache=REPO / "assets" / "emoji")
         results.append(dest)
         _log(f"  ✓ {dest.stat().st_size / 1e6:.1f} MB", quiet)
 

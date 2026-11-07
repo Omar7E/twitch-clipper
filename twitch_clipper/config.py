@@ -76,6 +76,12 @@ class RenderConfig:
     title_wrap: int = 24
     title_bg: str = "#000000"
     title_opacity: float = 0.55
+    # the headline uses its own face: a geometric sans, closer to the look
+    # short-form platforms use, rather than the condensed caption font
+    title_font: str = "Poppins"
+    title_font_file: str = "Poppins-Bold.ttf"
+    title_y_frac: float = 0.20   # headline centre, as a fraction of height
+    title_hold: bool = True      # keep it up for the whole clip
 
     follow_text: str = "FOLLOW TPCFP ON TWITCH"
     follow_size: int = 62
