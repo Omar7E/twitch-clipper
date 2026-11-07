@@ -343,3 +343,35 @@ its word list. Add terms to `censor.py` rather than editing transcripts.
 into `approved/<vod-id>` named by timestamp and title, with a clips.txt
 listing each one. Deliver that folder rather than the raw render directory,
 which holds rejected and superseded takes.
+
+## Safe area, and never wrap by character count
+
+Every drawn element stays inside the short-form safe area: 72px from the
+sides, 180px from the top, 340px from the bottom. Platform UI covers the
+rest - the top bar, the action buttons down the right edge, the caption and
+username block along the bottom. Text touching a frame edge looks broken and
+can be clipped outright.
+
+Wrap headlines by **measured pixel width**, never by character count. A
+24-character line in a bold sans at 80px measures 1176px and runs off a
+1080px frame; the character limit has no relationship to the frame. Measure
+the real font and fill to a pixel budget.
+
+After rendering, look at a frame of the headline clip and confirm the text
+has clear margin on both sides. This is the easiest fault to introduce and
+the most obvious one to a viewer.
+
+## Post captions
+
+Every clip ships with a caption in this shape:
+
+```
+<one short line about what happens>
+
+Twitch: Tpcfp
+
+#twitch #gaming
+```
+
+The same two hashtags every time. The hook line is lower case and
+conversational - it is not the headline repeated.
