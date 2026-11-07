@@ -277,9 +277,15 @@ accepts `1:56:20`, `56:20` or raw seconds, and plans its own cuts from the
 saved curve. Pass `--set clip.multi_cut=false` when it must stay contiguous
 — a reveal or results screen is ruined by jump cuts.
 
-A pinned moment is not transcribed automatically: slice its window from
-`work/<vod-id>/audio.m4a`, run `transcribe_words`, remap with `remap_words`,
-and write the result back into `moments.json`.
+`render` now transcribes any moment whose `words` list is empty before it
+renders, so a pinned moment gets captions on its own. Before that fix only
+`find` transcribed, and hand-pinned clips rendered silently with no captions
+at all — the render log looked completely normal. If captions ever go
+missing, check `words` in `moments.json` first.
+
+Whisper is not deterministic across runs: re-transcribing the same window
+can return a noticeably different word count. Prefer the richer transcript
+rather than letting a re-render quietly thin out the captions.
 
 Expect to pin moments on most VODs. The signals find reactions; you find
 meaning.
@@ -360,6 +366,78 @@ the real font and fill to a pixel budget.
 After rendering, look at a frame of the headline clip and confirm the text
 has clear margin on both sides. This is the easiest fault to introduce and
 the most obvious one to a viewer.
+
+Do not measure the margin by thresholding bright pixels in the rendered
+frame: pale game walls and the blurred backdrop read as text and produce
+false violations. Either burn the `.ass` over a black frame and measure
+that, or compute the box from the same `wrap_to_width` / `measure` calls the
+renderer uses.
+
+Emoji placement is clamped to the safe edge, so a long last line pushes the
+emoji flush against the boundary with no gap after the word. That is inside
+the safe area but looks cramped. When the clamp fires, shorten the last line
+until the emoji sits naturally with roughly 100px of margin to spare.
+
+`wrap_to_width` silently truncates past `max_lines` (3), so an over-long
+headline loses its final words with no error. Always assert the wrapped
+lines still contain every word of the title before rendering.
+
+## When the audio curve is flat
+
+On a quiet stream the score curve carries almost no information: every
+10-minute block peaks at 1.00 and the means sit within a few hundredths of
+each other. Profile it before trusting any ranking:
+
+```python
+import numpy as np
+z = np.load("work/<vod-id>/signals.npz")
+c, hop = z["curve"], float(z["hop"])
+blk = int(600 / hop)
+for i in range(0, len(c), blk):
+    s = c[i:i+blk]
+    print(int(i*hop/60), round(s.mean(), 3), round(np.percentile(s, 99), 3))
+```
+
+If the blocks are indistinguishable, the ordering is close to arbitrary.
+Verify every candidate visually and expect to reject several outright.
+
+Three cheap ways to find what the curve cannot:
+
+- **Read chat directly.** Offsets live under the key `t`, in seconds.
+  Print the whole log with gaps marked; a two-minute cluster of laughter is
+  worth more than any peak. Chat is dropped from the signal entirely below
+  `chat_min_rate` (2.0/min), so on a quiet stream those bursts never reach
+  the ranking at all — but they are still the best evidence you have.
+- **Pull the storyboard** (`yt-dlp -f sb0`) for a free whole-stream map.
+  Fetch the tile URLs straight from the mhtml with curl; decoding the
+  fragments out of the mhtml itself gives corrupt JPEGs. Tiles are a 5x10
+  grid, so one frame every `duration/200` seconds.
+- **Sweep short probes.** Six-second sections every 2-3 minutes across an
+  unexplored stretch, tiled into one labelled sheet, shows where the action
+  actually is for a few minutes of downloading.
+
+Confirm a chat burst with footage before pinning it. A burst of "w" spam
+turned out to be chat messing about over an empty field.
+
+## Downloading is the bottleneck, and it parallelises
+
+A single yt-dlp connection to a VOD runs at roughly 60 KB/s, so the
+render's sequential 1080p60 fetches can take hours. Aggregate bandwidth is
+far higher. Pre-fill the cache in parallel instead, then render:
+
+```bash
+# cache path: work/<vod-id>/clips/{int(window_start)}_{int(window_len)}.mp4
+yt-dlp -f 1080p60/best --download-sections "*${ws}-${we}" \
+  --force-keyframes-at-cuts -o "tmp_${ws}_${len}.mp4" "$URL" \
+  && mv "tmp_${ws}_${len}.mp4" "${ws}_${len}.mp4"
+```
+
+Download to a temporary name and rename on success, so a partial file is
+never mistaken for a finished cache entry. Nine clips drop from hours to
+about fifteen minutes.
+
+Use 480p for anything you only intend to look at. Judging candidates,
+contact sheets and probe sweeps never need the full-quality rendition.
 
 ## Post captions
 

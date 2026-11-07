@@ -13,6 +13,10 @@ from .transcribe import TranscribeUnavailable
 from .twitch import TwitchError, parse_vod_id
 
 
+# the same two hashtags go on every clip, so the posts stay consistent
+POST_HASHTAGS = "#twitch #gaming"
+
+
 def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--config", help="JSON config file with score/render overrides")
     p.add_argument("--set", dest="overrides", action="append", default=[],
@@ -289,7 +293,8 @@ def main(argv: list[str] | None = None) -> int:
             # the caption to paste when posting
             caption = m.get("caption") or ""
             if not caption:
-                caption = f"{m.get('title', '').capitalize()}\n\nTwitch: Tpcfp"
+                caption = (f"{m.get('title', '').capitalize()}"
+                           f"\n\nTwitch: Tpcfp\n{POST_HASHTAGS}")
             lines.append("    ---")
             for cl in caption.splitlines():
                 lines.append(f"    {cl}" if cl else "")

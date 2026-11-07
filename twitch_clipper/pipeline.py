@@ -278,6 +278,33 @@ def render_moments(moments_file: Path, cfg: Config, *,
                 if only is None or m["rank"] in only]
     results: list[Path] = []
 
+    # `clipper add` stores a moment with no words, and only `find` used to
+    # transcribe, so a hand-pinned moment rendered silently with no captions.
+    # Fill in anything still missing before the render loop.
+    needs_words = [m for m in selected if not (m.get("words") or [])]
+    audio = work / "audio.m4a"
+    if needs_words and audio.exists():
+        _log(f"→ transcribing {len(needs_words)} un-captioned moment(s) "
+             f"(whisper {cfg.whisper_model})…", quiet)
+        for m in needs_words:
+            wav = work / "slices" / f"pinned_{int(m['start'])}.wav"
+            try:
+                slice_wav(audio, m["start"], m["end"], wav)
+                said = transcribe_words(wav, model_size=cfg.whisper_model,
+                                        language=cfg.whisper_lang)
+                segs = [(a, b) for a, b in (m.get("segments") or
+                                            [[m["start"], m["end"]]])]
+                m["words"] = remap_words(said, segs, m["start"])
+                _log(f"  @{m['start']:.0f}s: {len(said)} words "
+                     f"→ {len(m['words'])} after cuts", quiet)
+            except TranscribeUnavailable as e:
+                _log(f"  captions off: {e}", quiet)
+                break
+            except Exception as e:  # a bad slice shouldn't kill the render
+                _log(f"  @{m['start']:.0f}s transcription failed: {e}", quiet)
+                m["words"] = []
+        moments_file.write_text(json.dumps(data, indent=2))
+
     for m in selected:
         rank = m["rank"]
         _log(f"\n── clip {rank}/{len(data['moments'])} "
