@@ -58,6 +58,44 @@ The CLI blends chat rate and audio excitement. Both have predictable blind spots
 - The delayed reaction: a pause, then the realisation. The pause is the joke, so keep it.
 - A funny fail that leads to a laugh a few seconds after the audio peak.
 
+**Three ways a clip gets rejected even when the moment was real** — all
+three came back as rejections on delivered clips:
+
+- **A line is not a moment.** Someone saying something funny once, with
+  nothing happening on screen around it, is not a clip. "They made a rule
+  for whoever dies the most" was said in passing and then nothing followed
+  it; the window held a genuinely good moment and the clip wasted it. Ask
+  what a viewer *sees* happen, not what gets said.
+- **Padding kills it.** If most of the runtime is not the thing the title
+  promises, the clip is useless however good the payoff is. Cut to the
+  part that matters or drop it.
+- **It cannot assume anyone cares who these people are.** A clip that only
+  works if you already know the streamer and his friends has no hook for a
+  stranger. The feeling has to be legible from the screen alone.
+
+## Read the transcript for laughter and name spam
+
+Two patterns in the transcript beat the score curve at finding real
+moments. Scan for them on every VOD, before judging any candidate.
+
+**Laughter.** Stretches with a lot of laughing are usually good clips.
+Look for runs of "hahaha", "LMAO", "oh my god", "bro", "what", "no way",
+wheezing and people talking over each other. A dense cluster of laughter
+is the single most reliable signal available, and it beats a loud audio
+peak every time: the audio detector fires on shouting, which is often just
+someone being loud about nothing. Laughter means something actually
+landed. Transcribe generously around these and read the surrounding lines
+to find where the joke starts.
+
+**Spamming someone's name.** When several people repeat one person's name
+("Ryan, Ryan, RYAN", "Omar please", "KELP"), that almost always marks a
+high-tension or high-blame moment: that person is about to ruin it, just
+ruined it, or is being begged to do something. Treat repeated-name bursts
+as clip candidates in their own right, in the transcript and in chat.
+
+Both patterns survive when the score curve is flat, which is most of the
+time on a small stream.
+
 If you add a moment the tool missed, say so explicitly and explain what you saw in the transcript or chat that justified it.
 
 ## Where a clip starts and ends
