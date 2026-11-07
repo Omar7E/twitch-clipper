@@ -533,6 +533,56 @@ standing instruction is the same two tags every time, so keep that unless
 they say otherwise, but the reference set suggests name tags are doing
 work.
 
+## Cover the whole VOD, not just what the detector nominated
+
+A whole game got missed on one VOD — 35 minutes of Chained Together with
+three clippable moments in it — because the audio detector ranked nothing
+there and the visual sweep started after it. The detector decides what to
+rank; it must never decide what gets *looked at*.
+
+Transcribe the entire VOD up front and hunt it directly. On 4 cores this
+is parallel chunks of 15 minutes with a small/base model, and it is worth
+the wait because every later decision rests on it:
+
+```bash
+# one worker per chunk, PYTHONPATH set to the repo root
+for s in $(seq 900 900 10500); do
+  PYTHONPATH=/path/to/repo python3 tx_worker.py $s $((s+900)) out_$s.json &
+done; wait
+```
+
+Then score every 30s window for laughter and repeated names, and verify
+the top hits on screen before pinning any of them.
+
+**The name-spam heuristic does the heavy lifting.** On the VOD above it
+found all three Chained Together moments — a synchronised jump that
+collapses into "Ryan pull us, Ryan look down", a rope fight ending in
+"Joe, Joe, Joe", and a teammate refusing to jump — none of which the
+audio curve ranked at all.
+
+**Laughter does not survive a small transcriber.** The `base` model writes
+no "haha" tokens, so a text search for laughter returns nothing even
+through a clear laughing fit; the highest-scoring window on that VOD was
+thirty consecutive "oh"s, which is what the model does with laughter.
+Treat repeated short interjections as the laughter signal, and use an
+acoustic detector if text-level laughter ever needs to be reliable.
+
+**Name spam still needs the screen check.** The single highest name-spam
+count on that VOD was "KELP" shouted seven times — eighty seconds of a
+lobby screen with nobody playing. Every candidate gets looked at.
+
+## Check the frames, and check the numbers
+
+Two faults shipped past a clean render log in one batch:
+
+- **Whisper auto-detect produced Arabic captions** on clear English audio,
+  burnt in. `whisper_lang` is now pinned to `en`. Nothing in the log
+  hinted at it.
+- **A number in a headline was wrong.** A deaths table read as 17 from a
+  downscaled contact sheet was actually 16. Any figure that goes in a
+  title gets re-read from a full-resolution crop of the frame it comes
+  from, never from a thumbnail.
+
 ## Post captions
 
 Every clip ships with a caption in this shape:
