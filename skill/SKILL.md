@@ -119,6 +119,7 @@ Length should follow the moment, not a fixed number. Shorter is better only unti
 | Moment type | Typical length | Why |
 |---|---|---|
 | Instant payoff (a kill, a jump scare, a one-liner, a quick fail) | 8 to 20 s | Nothing to build, so any extra length dilutes it |
+| **Co-op chaos with friends (this channel's staple)** | **55 to 75 s** | The argument, the blame and the recovery are the content |
 | Clutch or build-up with a tense lead-in | 15 to 35 s | The tension is what makes the payoff land, so keep the build |
 | Rage, meltdown or escalating chaos | 20 to 40 s | The escalation is the content |
 | Story, hot take or banter exchange | 30 to 60 s | Needs the setup and twist; cut hard inside it instead of cutting the ending |
@@ -160,7 +161,8 @@ The title card is a headline, and its job is to stop a scroller who has never he
 - **Open a curiosity gap, then let the clip close it.** Hint at the outcome without stating the payoff, so the clip delivers the reveal. Never give away the ending in the title.
 - **Be specific.** Concrete details beat vague hype. "1 HP" beats "insane", and "after 40 attempts" beats "finally".
 - **Use second person or a generic subject when it helps:** "this guy", "he", "my teammate", "you", or a role like "a boss". Talk to the viewer rather than about an unknown person.
-- **Keep it short and readable in about 2 seconds on a phone,** ideally 4 to 9 words, in caps.
+- **Keep it short and readable in about 2 seconds on a phone,** ideally 4 to 9 words, in sentence case.
+- **No colons.** Write it the way it would be said out loud: "Bro just had one job", not "He had one job: avoid the lava". Casual beats formal, and "bro" / "this guy" / "his own team" carry the tone.
 - **Be honest.** The clip must deliver what the title promises. Clickbait that disappoints kills retention and gets the clip buried.
 - **Describe the event, or quote the line that *is* the joke.** Default to describing what happened; pull the facts from `clipper show --full`, and trust chat's reading of the event when the streamer's words are vague. The exception, which the reference clips lean on heavily: when one spoken line is itself the content — a corny line, an absurd demand, the thing that triggered the meltdown — put it in quotation marks with an emoji and let it be the headline. Quote other people (a chatter, a friend, a kid on voice chat) rather than the streamer narrating his own gameplay.
 
@@ -492,13 +494,18 @@ Seven clips the user picked out as good, measured rather than guessed
 | 6 | frustration + its trigger | 24s | 0 | `"bro is sitting" 😭❤️‍🔥` |
 | 7 | POV meme | 65s | 0 | `Pov: me and bro arguing over the dumbest shit ever` |
 
-**A single moment runs contiguous.** Every one-moment clip here has zero
-internal cuts: 4, 6, 7 and 2 never cut once. Cuts appear only in
-compilations stitching separate moments (1, 3) and in a replay shown from
-several angles (5). This matters because the tool defaults to 4-5 jump
-cuts inside every clip. Multi-cut is for compressing a long window into a
-story, not for tightening a moment that already works — if the moment is
-one continuous beat, set `clip.multi_cut=false` and let it run.
+**Do not read "contiguous" off this table and apply it to everything.**
+That mistake was made and the whole batch came back rejected as "pretty
+short" and "boring and disappointing". The short clips here are *instant
+payoffs* — a 10-second Rocket League goal, a 17-second one-liner — where
+there is nothing to build. tpcfp's content is co-op chaos with friends,
+which needs build-up, and belongs with the 60s+ end of this table.
+
+**For this channel, aim for 55-75 seconds.** Take a 90-170 second window
+around the moment and cut the dead air out of it with one or two cuts,
+not five. The arc is what makes it work: setup, escalation, payoff. A
+25-second beat has no story in it and reads as boring however good the
+peak is.
 
 **Quoting is a real pattern, not a mistake.** Three of seven headlines are
 a literal quote in quotation marks plus an emoji. The rule is not "never
